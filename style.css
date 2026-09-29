@@ -1,0 +1,353 @@
+/* ==========================================================================
+   DEEP LINE — retro UI stílus
+   Külső font nélkül: vastag monospace + kemény árnyékok = pixel hatás.
+   ========================================================================== */
+
+:root {
+  --ink: #05070f;
+  --panel: #0d1424;
+  --border: #2c3d63;
+  --text: #dfe8f5;
+  --dim: #6b7fa6;
+  --amber: #ffc933;   /* P1 színe is */
+  --sea: #5fd0ff;     /* P2 színe is */
+  --red: #ff4a4a;
+  --green: #6cf06c;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  background: var(--ink);
+  color: var(--text);
+  font-family: "Courier New", Courier, monospace;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 8px;
+  user-select: none;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/* 1 játékosnál a P2 elemek rejtve */
+body:not(.two-player) .only-2p { display: none !important; }
+
+#game-wrapper {
+  width: min(96vw, 960px, calc((100vh - 190px) * 4 / 3));
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---------- HUD ---------- */
+#hud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 14px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 3px solid var(--border);
+  box-shadow: 4px 4px 0 #000;
+  font-size: clamp(11px, 1.7vw, 17px);
+}
+
+.hud-item .label { color: var(--dim); }
+.hud-item .value { color: var(--text); text-shadow: 2px 2px 0 #000; }
+.hud-item .value.p1c { color: var(--amber); }
+.hud-item .value.p2c { color: var(--sea); }
+#target.reached { color: var(--green); }
+#time.low { color: var(--red); animation: blink 0.5s steps(1) infinite; }
+
+.mode-tag { padding: 0 6px; border: 2px solid var(--amber); color: var(--amber); }
+.mode-tag.night { border-color: #8f7dff; color: #8f7dff; }
+
+/* ---------- Játéktér ---------- */
+#screen {
+  position: relative;
+  border: 3px solid var(--border);
+  box-shadow: 4px 4px 0 #000;
+  background: #000;
+  line-height: 0;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+#screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,0.2) 3px);
+  z-index: 3;
+}
+
+/* ---------- Menük ---------- */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(3px, 0.9vw, 10px);
+  padding: 10px;
+  overflow: auto;
+  text-align: center;
+  line-height: 1.35;
+  background: rgba(3, 5, 14, 0.78);
+  font-size: clamp(9px, 1.45vw, 15px);
+}
+
+.hidden { display: none !important; }
+
+.title {
+  font-size: clamp(26px, 7vw, 68px);
+  color: var(--sea);
+  letter-spacing: 0.22em;
+  text-shadow: 3px 3px 0 #1b4f8f, 6px 6px 0 #0a1f3d, 9px 9px 0 #000;
+}
+
+.subtitle { color: var(--dim); }
+.mode-desc { color: var(--text); min-height: 1.4em; }
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 8px;
+  border: 2px solid transparent;
+}
+.menu-row.active { border-color: var(--border); background: rgba(44, 61, 99, 0.35); }
+.menu-label { color: var(--amber); min-width: 7.5em; text-align: right; }
+
+button {
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  font-size: clamp(11px, 1.9vw, 18px);
+  cursor: pointer;
+  padding: 0.35em 1em;
+  background: #16213a;
+  color: var(--text);
+  border: 3px solid var(--border);
+  box-shadow: 4px 4px 0 #000;
+}
+
+button:hover, button:focus-visible, .opt.selected {
+  background: var(--amber);
+  color: #000;
+  border-color: #fff;
+  outline: none;
+}
+.opt[data-value="night"].selected, .opt[data-value="2"].selected { background: #6a58ff; color: #fff; }
+button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
+
+.start-btn { padding: 0.4em 2.4em; }
+
+.controls { color: var(--text); font-size: 0.85em; }
+.controls .dim { color: var(--dim); }
+
+.tag { display: inline-block; padding: 0 4px; border: 2px solid var(--dim); color: var(--dim); line-height: 1.2; }
+.tag-p1 { border-color: var(--amber); color: var(--amber); }
+.tag-p2 { border-color: var(--sea); color: var(--sea); }
+
+.pad-status { color: var(--dim); font-size: 0.8em; }
+.pad-status.on { color: var(--green); }
+
+.blink { color: var(--amber); animation: blink 1s steps(1) infinite; }
+
+/* Game Over */
+.go-title {
+  font-size: clamp(22px, 5vw, 48px);
+  color: var(--red);
+  text-shadow: 3px 3px 0 #5a0f0f, 6px 6px 0 #000;
+}
+.go-title.p1win { color: var(--amber); text-shadow: 3px 3px 0 #6b4a00, 6px 6px 0 #000; }
+.go-title.p2win { color: var(--sea); text-shadow: 3px 3px 0 #0f3f5a, 6px 6px 0 #000; }
+
+.stats { border-collapse: collapse; }
+.stats td, .stats th { padding: 0.1em 0.7em; text-align: right; }
+.stats td:first-child { color: var(--dim); text-align: left; }
+.stats th { color: var(--dim); }
+.stats .c1 { color: var(--amber); }
+.stats .c2 { color: var(--sea); }
+
+.record { color: var(--green); }
+.record.new { animation: blink 0.6s steps(1) infinite; }
+
+.catch-log {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  max-height: 6.5em;
+  overflow-y: auto;
+  font-size: 0.8em;
+  text-align: left;
+}
+.catch-log h3 { font-size: 1em; color: var(--dim); }
+.catch-log ul { list-style: none; }
+.catch-log .p1c { color: var(--amber); }
+.catch-log .p2c { color: var(--sea); }
+
+.buttons { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.hint { color: var(--dim); font-size: 0.8em; }
+
+/* ---------- Játékos panelek ---------- */
+#panels {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+body.two-player #panels { grid-template-columns: 1fr 1fr; }
+
+.panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px 12px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 3px solid var(--border);
+  box-shadow: 4px 4px 0 #000;
+  font-size: clamp(9px, 1.3vw, 14px);
+}
+body.two-player .panel { grid-template-columns: 1fr; }
+#panel-1 { border-left-color: var(--amber); }
+#panel-2 { border-left-color: var(--sea); }
+
+.panel-head, .panel-stats {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.panel-stats { color: var(--dim); }
+.panel-stats b { color: var(--text); }
+.panel-stats i { font-style: normal; text-transform: none; color: var(--text); }
+.fish-name { color: var(--text); flex: 1; }
+
+.panel.idle .meter { opacity: 0.45; }
+
+.status-struggle { color: var(--red); animation: blink 0.4s steps(1) infinite; }
+.status-rest     { color: var(--green); }
+.status-tired    { color: var(--sea); }
+.status-danger   { color: var(--red); animation: blink 0.2s steps(1) infinite; }
+
+.meter-head { display: flex; justify-content: space-between; margin-bottom: 3px; }
+
+.bar {
+  position: relative;
+  height: clamp(9px, 1.5vw, 14px);
+  background: #000;
+  border: 2px solid var(--border);
+}
+.bar.thin { height: clamp(7px, 1.1vw, 10px); }
+.bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to right, transparent 0, transparent calc(10% - 2px), #000 calc(10% - 2px), #000 10%);
+}
+
+.fill { height: 100%; width: 0; }
+.stamina-fill { background: var(--green); }
+.stamina-fill.empty { background: var(--sea); }
+.tension-fill { background: var(--amber); }
+.tension-fill.danger { background: var(--red); animation: blink 0.25s steps(1) infinite; }
+.reel-fill { background: #c77dff; }
+
+.help { text-align: center; color: var(--dim); font-size: clamp(9px, 1.2vw, 13px); }
+
+@keyframes blink { 50% { opacity: 0.3; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .blink, #time.low, .status-struggle, .status-danger, .tension-fill.danger, .record.new { animation: none; }
+}
+
+@media (max-width: 560px) {
+  .panel { grid-template-columns: 1fr; }
+  body.two-player #panels { grid-template-columns: 1fr; }
+}
+
+/* ---------- v3: szünet menü, nyelvválasztó, asztali verzió ---------- */
+body:not(.desktop) .desktop-only { display: none !important; }
+
+.lang-opt { font-size: clamp(10px, 1.6vw, 15px); }
+
+.pause-title {
+  font-size: clamp(26px, 6vw, 58px);
+  color: var(--amber);
+  letter-spacing: 0.2em;
+  text-shadow: 3px 3px 0 #6b4a00, 6px 6px 0 #000;
+}
+
+.pause-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 14em;
+}
+
+.pause-opt.selected {
+  background: var(--amber);
+  color: #000;
+  border-color: #fff;
+}
+
+/* ---------- v4: főmenü gombsor, OPTIONS (hangerő) ---------- */
+.action-row { gap: 12px; }
+.act-btn.selected { background: var(--amber); color: #000; border-color: #fff; }
+#btn-options-back.selected { background: var(--amber); color: #000; border-color: #fff; }
+
+.vol-list { display: flex; flex-direction: column; gap: 10px; }
+
+.vol-row {
+  display: grid;
+  grid-template-columns: 11em auto minmax(120px, 18em) auto 4.5em;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border: 2px solid transparent;
+}
+.vol-row.active { border-color: var(--border); background: rgba(44, 61, 99, 0.35); }
+.vol-label { color: var(--amber); text-align: right; }
+.vol-val { color: var(--text); text-align: left; }
+.vol-btn { padding: 0.1em 0.7em; }
+
+.vol-bar {
+  position: relative;
+  height: clamp(10px, 1.6vw, 16px);
+  background: #000;
+  border: 2px solid var(--border);
+}
+.vol-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to right, transparent 0, transparent calc(10% - 2px), #000 calc(10% - 2px), #000 10%);
+}
+.vol-fill { height: 100%; width: 0; background: var(--green); }
+
+@media (max-width: 560px) {
+  .vol-row { grid-template-columns: 1fr auto 1fr auto; }
+  .vol-label { grid-column: 1 / -1; text-align: center; }
+  .vol-val { display: none; }
+}
+
+/* v5: bónuszidő villanás */
+#time.bonus { color: var(--green); }

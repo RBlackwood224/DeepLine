@@ -1,0 +1,3003 @@
+'use strict';
+
+/* ==========================================================================
+   DEEP LINE — retro arcade horgászverseny (v4)
+   HTML5 Canvas + vanilla JavaScript, külső függőségek és képfájlok nélkül.
+
+   Újdonságok a v2-ben:
+     - kontroller támogatás (Gamepad API)
+     - 2 játékos versus mód (közös tó, közös halak)
+     - ragadozó cápa, ami a horgon lévő halra vadászik
+     - körök pontcéllal, szintenként nehezedő játék + új halfajok
+     - minden kifogott hal saját nevet kap (fogásnapló a végén)
+     - gombnyomkodós tekerés (REEL), mint a régi atlétikás játékokban
+   v3:
+     - nyelvválasztó: English (alap) / Magyar / Français, ékezetes pixelfonttal
+     - szünet menü: folytatás, újrakezdés, főmenü, kilépés (asztali verzió)
+     - rekordok és nyelv mentése, asztali (.exe) támogatás
+   v4:
+     - háttérzene: külön menü / nappali / éjszakai lejátszási lista, áttűnéssel
+     - könnyebb nehézség, a damil "piros zónája" figyelmeztet szakadás előtt
+     - rövidebb kör, de minden fogás bónuszidőt ad (nehezebb hal = több idő)
+     - OPTIONS menü: külön zene- és effekt-hangerő (mentve)
+     - nyelvek: English (alap) / Français
+
+   Felépítés:
+     1.  Konfiguráció
+     2.  Segédfüggvények, geometria
+     3.  Canvas és paletták
+     4.  Bitmap pixel font
+     5.  Sprite-ok
+     6.  Halfajok, becenevek
+     7.  Hang
+     8.  Játékállapot, játékosok
+     9.  Bemenet: billentyűzet + kontroller
+     10. Menü és DOM UI
+     11. Háttér generálása
+     12. Halak: spawn, mozgás, kapás
+     13. Horog, fárasztás, tekerés, kifogás
+     14. Ragadozó (cápa)
+     15. Random események
+     16. Effektek
+     17. Rajzolás
+     18. HUD frissítés
+     19. Körök, szintek, játékmenet-vezérlés
+     20. Fő ciklus
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. KONFIGURÁCIÓ
+   ========================================================================== */
+const CONFIG = {
+  // --- Körök és szintek ---
+  ROUND_DURATION: 60,           // a kör induló ideje (mp) – minden fogás bónuszidőt ad
+  TIME_MAX: 99,                 // ennél több idő nem gyűlhet össze
+  CATCH_TIME_MULTIPLIER: 1.0,   // globális szorzó a fogásonkénti bónuszidőre
+  LEVEL_TIME_STEP: 0.06,        // körönként 6%-kal kevesebb bónuszidő...
+  LEVEL_TIME_MIN: 0.6,          // ...de legalább 60%
+  TARGET_BASE: 100,             // az 1. kör pontcélja
+  TARGET_STEP: 80,              // ennyivel nő a cél körönként
+  TIME_BONUS_PER_SEC: 2,        // megmaradt mp-enként ennyi bónusz a kör teljesítésekor
+  NIGHT_SCORE_MULTIPLIER: 1.5,  // éjszakai pontszorzó
+  POINTS_MULTIPLIER: 1.0,       // globális pontszorzó
+
+  // --- Szintenkénti nehezedés (mint a Tetrisben) ---
+  LEVEL_SPEED_STEP: 0.06,       // +6% halsebesség körönként
+  LEVEL_STAMINA_STEP: 0.08,     // +8% hal-stamina körönként
+  LEVEL_BITE_STEP: 0.04,        // -4% kapási esély körönként...
+  LEVEL_BITE_MIN: 0.55,         // ...de legalább 55%
+  LEVEL_DECAY_STEP: 0.03,       // lassabban enged a damil feszülése...
+  LEVEL_DECAY_MIN: 0.65,        // ...de legalább 65%
+  LEVEL_PREDATOR_STEP: 0.1,     // gyakoribb és gyorsabb cápa
+
+  // --- Halak ---
+  MAX_FISH_DAY: 14,
+  MAX_FISH_NIGHT: 9,
+  SPAWN_INTERVAL: 0.7,
+  FISH_SPEED_MULTIPLIER: 1.0,
+  STAMINA_MULTIPLIER: 1.0,
+
+  // --- Kapás ---
+  BITE_CHECK_INTERVAL: 0.4,
+  BITE_CHANCE_MULTIPLIER: 1.15,
+  BITE_COOLDOWN: 0.7,
+
+  // --- Ritka halak ---
+  RARE_CHANCE_MULTIPLIER: 1.0,
+  OLD_ONE_SPAWN_CHANCE: 0.004,
+  OLD_ONE_NIGHT_FACTOR: 3,
+
+  // --- Horog mozgás (px/mp, logikai 320x240 felbontásban) ---
+  HOOK_SPEED_X: 55,
+  HOOK_SPEED_DOWN: 40,
+  HOOK_SPEED_UP: 60,
+  HOOK_MAX_DEPTH: 0.96,
+  HOOKED_MOVE_X: 18,
+  REEL_SPEED_FIGHT: 18,         // felfelé nyíl nyomva tartva, amíg van ereje a halnak
+  REEL_SPEED_TIRED: 55,         // felfelé nyíl, kifáradt halnál
+  REEL_DRAIN: 3,
+  GIVE_LINE_SPEED: 25,
+  GIVE_LINE_RELIEF: 20,
+  RESET_SPEED: 120,
+
+  // --- Gombnyomkodós tekerés (REEL gomb) ---
+  MASH_IMPULSE: 24,             // egy gombnyomás ennyivel növeli a tekerési sebességet
+  MASH_MAX: 95,                 // maximális tekerési sebesség
+  MASH_DECAY: 2,                // milyen gyorsan "fogy el" a lendület
+  MASH_FIGHT_FACTOR: 0.7,       // amíg a halnak van ereje, ennyire hatékony
+  MASH_TENSION_REST: 2,         // feszülés / nyomás, ha a hal pihen
+  MASH_TENSION_STRUGGLE: 3,     // feszülés / nyomás, ha a hal vergődik
+  MASH_DRAIN: 1,                // stamina / nyomás
+
+  // --- Fárasztás ---
+  TUG_DAMAGE: 13,
+  TUG_REST_BONUS: 1.6,
+  TUG_TENSION_REST: 7,
+  TUG_TENSION_STRUGGLE: 14,
+  TUG_SPAM_WINDOW: 0.25,
+  TUG_SPAM_PENALTY: 10,
+  REEL_TENSION_REST: 6,
+  REEL_TENSION_STRUGGLE: 32,
+  STRUGGLE_TENSION: 6,
+  TENSION_DECAY: 18,
+  TENSION_MAX: 100,
+  SNAP_ZONE: 90,                // e fölött a damil "piros zónában" van...
+  SNAP_GRACE: 0.8,              // ...és ennyi mp után elszakad, ha nem engedsz rajta
+  REGEN_DELAY: 1.4,
+  STRUGGLE_PULL: 1.4,           // vergődés közben ennyiszeres erővel húz a hal
+  REST_PULL: 0.3,               // pihenés közben ennyivel
+  SIZE_PULL_DIVIDER: 45,        // nagyobb = a nagy halakat is könnyebb felhúzni
+
+  // --- Ragadozó cápa ---
+  PREDATOR_ENABLED: true,
+  PREDATOR_START_LEVEL: 2,      // ettől a körtől jelenik meg a cápa
+  PREDATOR_FIRST_MIN: 20,       // a kör elején legkorábban ennyi mp múlva jön
+  PREDATOR_FIRST_MAX: 45,
+  PREDATOR_RETURN_MIN: 10,      // elúszás után ennyi idő múlva jöhet vissza
+  PREDATOR_RETURN_MAX: 25,
+  PREDATOR_SPEED: 16,           // őrjárat sebessége
+  PREDATOR_HUNT_SPEED: 34,      // vadászat sebessége
+  PREDATOR_HUNT_MAX: 55,        // a vadászsebesség felső határa magas szinten
+  PREDATOR_PATROL_MIN: 6,
+  PREDATOR_PATROL_MAX: 12,
+  PREDATOR_GIVEUP: 9,           // ennyi mp sikertelen vadászat után feladja
+
+  // --- Random események ---
+  EVENT_START_DELAY: 15,
+  EVENT_CHECK_INTERVAL: 1,
+  EVENT_CHANCE: 0.035,
+  EVENT_COOLDOWN: 20,
+  FRENZY_DURATION: 10,
+  FRENZY_EXTRA_FISH: 12,
+  CALM_DURATION: 8,
+  CALM_SPEED_FACTOR: 0.45,
+
+  // --- Képernyő ---
+  WIDTH: 320,
+  HEIGHT: 240,
+  SURFACE_RATIO: 0.15,
+  ZONE_SHALLOW_END: 0.30,
+  ZONE_MID_END: 0.65,
+  MAX_DEPTH_METERS: 100
+};
+
+
+/* ==========================================================================
+   1/B. NYELVEK (English / Français) ÉS MENTÉS
+   Új szöveg felvétele: ugyanazzal a kulccsal mindhárom nyelvhez.
+   A {n}, {p}, {name}, {shift} helyére érték kerül.
+   ========================================================================== */
+const LANGS = ['en', 'fr'];
+const GAP = '\u00a0\u00a0\u00a0';   // nem törhető szóközök a vezérlés-sorokban
+
+const I18N = {
+  en: {
+    p: "P", tag_p1: "P1", tag_p2: "P2",
+    hud_score: "SCORE", hud_round: "ROUND", hud_target: "TARGET", hud_time: "TIME",
+    mode_day: "DAY", mode_night: "NIGHT",
+    subtitle: "A RETRO FISHING CONTEST",
+    menu_players: "PLAYERS", menu_shift: "SHIFT", menu_lang: "LANGUAGE",
+    opt_1p: "1P", opt_2p: "2P VERSUS",
+    desc_1: "SOLO: REACH THE TARGET BEFORE TIME RUNS OUT.",
+    desc_2: "VERSUS: FIRST TO THE TARGET WINS THE ROUND.",
+    desc_day: "DAY: LOTS OF SMALL AND MEDIUM FISH.",
+    desc_night: "NIGHT: FEWER FISH, BIGGER PREY, X1.5 POINTS.",
+    btn_start: "START", btn_exit: "EXIT",
+    ctrl_p1: `ARROWS${GAP}SPACE TUG${GAP}ENTER REEL`,
+    ctrl_p2: `WASD${GAP}F TUG${GAP}G REEL`,
+    ctrl_pad: `STICK${GAP}B/X TUG${GAP}A REEL${GAP}START PAUSE`,
+    ctrl_mash: "MASH REEL FAST TO PULL THE FISH UP!",
+    pad_none: "NO CONTROLLER FOUND - PRESS A PAD BUTTON",
+    pad_one: "1 CONTROLLER CONNECTED (PAD 1 = P1)",
+    pad_many: "{n} CONTROLLERS CONNECTED (PAD 1 = P1, PAD 2 = P2)",
+    menu_hint: `↑↓ ←→ CHOOSE${GAP}ENTER CONFIRM`,
+    help: `P / ESC PAUSE${GAP}M SOUND${GAP}F11 FULLSCREEN${GAP}STAY SHALLOW WHEN THE SHARK HUNTS!`,
+    pause_title: "PAUSED", btn_resume: "RESUME", btn_restart: "RESTART", btn_menu: "MAIN MENU",
+    pause_hint: "ESC / PAD START: RESUME",
+    go_timeup: "TIME UP!", go_wins: "{p} WINS!", go_draw: "DRAW!",
+    go_sub: "REACHED ROUND {n} - {shift}",
+    stat_total: "TOTAL SCORE", stat_rounds: "ROUNDS WON", stat_caught: "FISH CAUGHT",
+    stat_biggest: "BIGGEST FISH", stat_rarest: "RAREST FISH", stat_eaten: "EATEN BY SHARK",
+    record_new: "NEW HIGH SCORE!", record_best: "BEST {n}",
+    log_title: "CATCH LOG", log_title_p: "{p} CATCH LOG", log_empty: "NO FISH CAUGHT",
+    btn_again: "PLAY AGAIN",
+    go_hint: `ENTER / PAD A: PLAY AGAIN${GAP}ESC / PAD BACK: MENU`,
+    panel_depth: "DEPTH", panel_fish: "FISH", panel_rpts: "ROUND PTS",
+    m_stamina: "STAMINA", m_tension: "LINE TENSION", m_reel: "REEL POWER",
+    no_fish: "NO FISH ON LINE", line_lost: "LINE LOST",
+    st_break: "LINE BREAKING! EASE OFF!", st_shark: "SHARK! GO SHALLOW!", st_tired: "EXHAUSTED! REEL IN",
+    st_struggle: "STRUGGLING!", st_rest: "RESTING - TUG NOW",
+    zone_shallow: "SHALLOW", zone_mid: "MID", zone_deep: "DEEP",
+    ban_old: "SOMETHING MOVES BELOW...", ban_legend: "LEGENDARY CATCH!", ban_rare: "RARE CATCH!",
+    ban_snap: "LINE SNAPPED!", ban_snap_p: "{p} LINE SNAPPED!", ban_shark: "SHARK INCOMING!",
+    ban_frenzy: "FISH FRENZY!", ban_calm: "CALM WATER",
+    ban_round: "ROUND {n}", ban_target: "TARGET {n}", ban_newfish: "NEW FISH: {name}",
+    ban_tougher: "FISH GET TOUGHER!", ban_clear: "ROUND {n} CLEAR!",
+    ban_winround: "{p} WINS ROUND {n}!", ban_bonus: "TIME BONUS +{n}",
+    pop_time: "+{n} SEC", pop_tired: "TIRED!", pop_legend: "LEGENDARY!", pop_eaten: "EATEN!",
+    pop_sound_on: "SOUND ON", pop_sound_off: "SOUND OFF",
+    ev_frenzy: "FRENZY", ev_calm: "CALM", shark: "SHARK",
+    btn_options: "OPTIONS", opt_title: "OPTIONS", opt_music: "MUSIC", opt_sfx: "SOUND EFFECTS",
+    btn_back: "BACK", opt_hint: `↑↓ SELECT${GAP}←→ ADJUST${GAP}ESC BACK`,
+    fish_minnow: "MINNOW", fish_perch: "PERCH", fish_puffer: "PUFFER", fish_bass: "BASS",
+    fish_needle: "NEEDLEFISH", fish_eel: "EEL", fish_squid: "GLOW SQUID", fish_angler: "ANGLER",
+    fish_goldfin: "GOLDFIN", fish_koi: "CRYSTAL KOI", fish_oldone: "THE OLD ONE"
+  },
+
+  fr: {
+    p: "J", tag_p1: "J1", tag_p2: "J2",
+    hud_score: "SCORE", hud_round: "MANCHE", hud_target: "OBJECTIF", hud_time: "TEMPS",
+    mode_day: "JOUR", mode_night: "NUIT",
+    subtitle: "UN CONCOURS DE PÊCHE RÉTRO",
+    menu_players: "JOUEURS", menu_shift: "MOMENT", menu_lang: "LANGUE",
+    opt_1p: "1J", opt_2p: "2J DUEL",
+    desc_1: "SOLO : ATTEINS L'OBJECTIF AVANT LA FIN DU TEMPS.",
+    desc_2: "DUEL : LE PREMIER À L'OBJECTIF GAGNE LA MANCHE.",
+    desc_day: "JOUR : BEAUCOUP DE PETITS ET MOYENS POISSONS.",
+    desc_night: "NUIT : MOINS DE POISSONS, PLUS GROSSES PRISES, POINTS X1,5.",
+    btn_start: "JOUER", btn_exit: "QUITTER",
+    ctrl_p1: `FLÈCHES${GAP}ESPACE FERRER${GAP}ENTRÉE MOULINER`,
+    ctrl_p2: `ZQSD${GAP}F FERRER${GAP}G MOULINER`,
+    ctrl_pad: `STICK${GAP}B/X FERRER${GAP}A MOULINER${GAP}START PAUSE`,
+    ctrl_mash: "MARTÈLE MOULINER POUR REMONTER LE POISSON !",
+    pad_none: "AUCUNE MANETTE - APPUIE SUR UN BOUTON",
+    pad_one: "1 MANETTE CONNECTÉE (MANETTE 1 = J1)",
+    pad_many: "{n} MANETTES CONNECTÉES (MANETTE 1 = J1, MANETTE 2 = J2)",
+    menu_hint: `↑↓ ←→ CHOISIR${GAP}ENTRÉE VALIDER`,
+    help: `P / ÉCHAP PAUSE${GAP}M SON${GAP}F11 PLEIN ÉCRAN${GAP}RESTE EN SURFACE QUAND LE REQUIN CHASSE !`,
+    pause_title: "PAUSE", btn_resume: "REPRENDRE", btn_restart: "RECOMMENCER", btn_menu: "MENU PRINCIPAL",
+    pause_hint: "ÉCHAP / START : REPRENDRE",
+    go_timeup: "TEMPS ÉCOULÉ !", go_wins: "{p} GAGNE !", go_draw: "ÉGALITÉ !",
+    go_sub: "MANCHE ATTEINTE : {n} - {shift}",
+    stat_total: "SCORE TOTAL", stat_rounds: "MANCHES GAGNÉES", stat_caught: "POISSONS PÊCHÉS",
+    stat_biggest: "PLUS GROS POISSON", stat_rarest: "POISSON LE PLUS RARE", stat_eaten: "MANGÉS PAR LE REQUIN",
+    record_new: "NOUVEAU RECORD !", record_best: "RECORD {n}",
+    log_title: "CARNET DE PÊCHE", log_title_p: "CARNET DE {p}", log_empty: "AUCUNE PRISE",
+    btn_again: "REJOUER",
+    go_hint: `ENTRÉE / MANETTE A : REJOUER${GAP}ÉCHAP / BACK : MENU`,
+    panel_depth: "PROF.", panel_fish: "POISSONS", panel_rpts: "PTS MANCHE",
+    m_stamina: "ENDURANCE", m_tension: "TENSION DU FIL", m_reel: "FORCE MOULINET",
+    no_fish: "AUCUN POISSON", line_lost: "FIL PERDU",
+    st_break: "LE FIL VA CASSER ! LÂCHE !", st_shark: "REQUIN ! REMONTE !", st_tired: "ÉPUISÉ ! MOULINE !",
+    st_struggle: "IL SE DÉBAT !", st_rest: "AU REPOS - FERRE !",
+    zone_shallow: "SURFACE", zone_mid: "MILIEU", zone_deep: "FOND",
+    ban_old: "QUELQUE CHOSE BOUGE EN BAS...", ban_legend: "PRISE LÉGENDAIRE !", ban_rare: "PRISE RARE !",
+    ban_snap: "FIL CASSÉ !", ban_snap_p: "{p} : FIL CASSÉ !", ban_shark: "ALERTE REQUIN !",
+    ban_frenzy: "FRÉNÉSIE !", ban_calm: "EAU CALME",
+    ban_round: "MANCHE {n}", ban_target: "OBJECTIF {n}", ban_newfish: "NOUVEAU : {name}",
+    ban_tougher: "LES POISSONS RÉSISTENT !", ban_clear: "MANCHE {n} RÉUSSIE !",
+    ban_winround: "{p} GAGNE LA MANCHE {n} !", ban_bonus: "BONUS TEMPS +{n}",
+    pop_time: "+{n} S", pop_tired: "ÉPUISÉ !", pop_legend: "LÉGENDAIRE !", pop_eaten: "DÉVORÉ !",
+    pop_sound_on: "SON ACTIVÉ", pop_sound_off: "SON COUPÉ",
+    ev_frenzy: "FRÉNÉSIE", ev_calm: "CALME", shark: "REQUIN",
+    btn_options: "OPTIONS", opt_title: "OPTIONS", opt_music: "MUSIQUE", opt_sfx: "EFFETS SONORES",
+    btn_back: "RETOUR", opt_hint: `↑↓ CHOISIR${GAP}←→ RÉGLER${GAP}ÉCHAP RETOUR`,
+    fish_minnow: "VAIRON", fish_perch: "PERCHE", fish_puffer: "POISSON-GLOBE", fish_bass: "BAR",
+    fish_needle: "ORPHIE", fish_eel: "ANGUILLE", fish_squid: "CALMAR LUMINEUX", fish_angler: "BAUDROIE",
+    fish_goldfin: "POISSON D'OR", fish_koi: "KOÏ DE CRISTAL", fish_oldone: "L'ANCIEN"
+  }
+};
+
+// Tartós mentés (böngészőben és az .exe-ben is megmarad)
+const Store = {
+  get(key, fallback) {
+    try {
+      const v = localStorage.getItem('deepline.' + key);
+      return v === null ? fallback : JSON.parse(v);
+    } catch (e) {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem('deepline.' + key, JSON.stringify(value));
+    } catch (e) {
+      // ha a mentés nem elérhető, a játék attól még fut
+    }
+  }
+};
+
+let lang = LANGS.includes(Store.get('lang', 'en')) ? Store.get('lang', 'en') : 'en';
+
+// Hangerő-beállítások (0..1), mentve
+const settings = Object.assign({ music: 0.6, sfx: 0.8 }, Store.get('volume', {}));
+
+function t(key, vars) {
+  let s = (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+  if (vars) {
+    for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(vars[k]);
+  }
+  return s;
+}
+
+const fishName = (key) => t('fish_' + key);
+const pLabel = (index) => t('p') + (index + 1);
+
+
+/* ==========================================================================
+   2. SEGÉDFÜGGVÉNYEK, GEOMETRIA
+   ========================================================================== */
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const pad = (n, len) => String(Math.max(0, Math.floor(n))).padStart(len, '0');
+const choice = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+function pickWeighted(entries) {
+  let total = 0;
+  for (const [, w] of entries) total += w;
+  if (total <= 0) return entries[0][0];
+  let r = Math.random() * total;
+  for (const [key, w] of entries) {
+    r -= w;
+    if (r <= 0) return key;
+  }
+  return entries[entries.length - 1][0];
+}
+
+const W = CONFIG.WIDTH;
+const H = CONFIG.HEIGHT;
+const SURFACE_Y = Math.round(H * CONFIG.SURFACE_RATIO);
+const WATER_H = H - SURFACE_Y;
+const ZONE_Y1 = SURFACE_Y + WATER_H * CONFIG.ZONE_SHALLOW_END;
+const ZONE_Y2 = SURFACE_Y + WATER_H * CONFIG.ZONE_MID_END;
+const HOOK_MIN_Y = SURFACE_Y + 3;
+const HOOK_MAX_Y = SURFACE_Y + WATER_H * CONFIG.HOOK_MAX_DEPTH;
+
+const depthToY = (frac) => SURFACE_Y + WATER_H * frac;
+const yToDepthFrac = (y) => clamp((y - SURFACE_Y) / WATER_H, 0, 1);
+
+function seabedHeight(x) {
+  return 4 + Math.round(1.5 * Math.sin(x * 0.19) + 1.5 * Math.sin(x * 0.061 + 2));
+}
+
+
+/* ==========================================================================
+   3. CANVAS ÉS PALETTÁK
+   ========================================================================== */
+const canvas = document.getElementById('game');
+canvas.width = W;
+canvas.height = H;
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const bgCanvas = document.createElement('canvas');
+bgCanvas.width = W;
+bgCanvas.height = H;
+const bgCtx = bgCanvas.getContext('2d');
+
+const darkCanvas = document.createElement('canvas');
+darkCanvas.width = W;
+darkCanvas.height = H;
+const darkCtx = darkCanvas.getContext('2d');
+
+const PALETTES = {
+  day: {
+    sky: ['#5ab4ec', '#72c2f2', '#8dd0f6', '#a9defa'],
+    hills: '#2d6a4e',
+    water: ['#35a2d6', '#2b90c4', '#227eb1', '#1b6c9d', '#145a88', '#0f4971',
+            '#0b395b', '#082a46', '#051d32', '#031221'],
+    zoneLine: 'rgba(255,255,255,0.22)',
+    label: '#a8dcff',
+    sand: '#86703f', sandTop: '#b39656', rock: '#4f5563',
+    weed: ['#2b873b', '#3fa24c'],
+    surface: '#dff6ff', foam: '#ffffff'
+  },
+  night: {
+    sky: ['#03030b', '#060919', '#0a0f26', '#0f1736'],
+    hills: '#08111d',
+    water: ['#1a385a', '#16304e', '#122842', '#0e2136', '#0b1a2c', '#081422',
+            '#060f19', '#040a11', '#03060b', '#010306'],
+    zoneLine: 'rgba(140,170,255,0.14)',
+    label: '#44628a',
+    sand: '#272116', sandTop: '#372f1f', rock: '#1a1c24',
+    weed: ['#0f3528', '#164637'],
+    surface: '#6e92c0', foam: '#a9c4e8'
+  }
+};
+
+
+/* ==========================================================================
+   4. BITMAP PIXEL FONT (3x5)
+   ========================================================================== */
+const FONT = {
+  A: '010101111101101', B: '110101110101110', C: '011100100100011', D: '110101101101110',
+  E: '111100110100111', F: '111100110100100', G: '011100101101011', H: '101101111101101',
+  I: '111010010010111', J: '001001001101010', K: '101101110101101', L: '100100100100111',
+  M: '101111111101101', N: '110101101101101', O: '010101101101010', P: '110101110100100',
+  Q: '010101101110011', R: '110101110101101', S: '011100010001110', T: '111010010010010',
+  U: '101101101101111', V: '101101101101010', W: '101101111111101', X: '101101010101101',
+  Y: '101101010010010', Z: '111001010100111',
+  0: '111101101101111', 1: '010110010010111', 2: '110001010100111', 3: '110001010001110',
+  4: '101101111001001', 5: '111100110001110', 6: '011100110101010', 7: '111001010010010',
+  8: '010101010101010', 9: '010101011001110',
+  ' ': '000000000000000', '+': '000010111010000', '-': '000000111000000',
+  '!': '010010010000010', '.': '000000000000010', ':': '000010000010000',
+  '?': '110001010000010', "'": '010010000000000', '/': '001001010100100',
+  ',': '000000000010100', '%': '101001010100101',
+  '<': '001010100010001', '>': '100010001010100'
+};
+
+const textWidth = (text, scale = 1) => String(text).length * 4 * scale - scale;
+
+// Ékezetek: alapbetű + néhány pixel a betű fölött (-2/-1. sor) vagy alatta (5. sor)
+const ACCENT_PIXELS = {
+  acute:  [[2, -2], [1, -1]],
+  grave:  [[0, -2], [1, -1]],
+  circ:   [[1, -2], [0, -1], [2, -1]],
+  umlaut: [[0, -1], [2, -1]],
+  dacute: [[0, -2], [0, -1], [2, -2], [2, -1]],
+  cedil:  [[1, 5]]
+};
+const ACCENTED = {
+  'Á': ['A', 'acute'], 'É': ['E', 'acute'], 'Í': ['I', 'acute'], 'Ó': ['O', 'acute'], 'Ú': ['U', 'acute'],
+  'Ö': ['O', 'umlaut'], 'Ü': ['U', 'umlaut'], 'Ő': ['O', 'dacute'], 'Ű': ['U', 'dacute'],
+  'À': ['A', 'grave'], 'È': ['E', 'grave'], 'Ù': ['U', 'grave'],
+  'Â': ['A', 'circ'], 'Ê': ['E', 'circ'], 'Î': ['I', 'circ'], 'Ô': ['O', 'circ'], 'Û': ['U', 'circ'],
+  'Ë': ['E', 'umlaut'], 'Ï': ['I', 'umlaut'], 'Ÿ': ['Y', 'umlaut'], 'Ç': ['C', 'cedil']
+};
+
+function drawTextRaw(g, str, x, y, scale, color) {
+  g.fillStyle = color;
+  for (let i = 0; i < str.length; i++) {
+    let ch = str[i];
+    let accent = null;
+    if (ACCENTED[ch]) {
+      accent = ACCENT_PIXELS[ACCENTED[ch][1]];
+      ch = ACCENTED[ch][0];
+    }
+    const glyph = FONT[ch] || FONT['?'];
+    const ox = x + i * 4 * scale;
+    for (let p = 0; p < 15; p++) {
+      if (glyph[p] === '1') g.fillRect(ox + (p % 3) * scale, y + Math.floor(p / 3) * scale, scale, scale);
+    }
+    if (accent) {
+      for (const [ax, ay] of accent) g.fillRect(ox + ax * scale, y + ay * scale, scale, scale);
+    }
+  }
+}
+
+function drawText(g, text, x, y, scale = 1, color = '#fff', align = 'left', shadow = true) {
+  const str = String(text).toUpperCase().replace(/Œ/g, 'OE');
+  const width = textWidth(str, scale);
+  let sx = x;
+  if (align === 'center') sx = x - width / 2;
+  else if (align === 'right') sx = x - width;
+  sx = Math.round(sx);
+  const sy = Math.round(y);
+  if (shadow) drawTextRaw(g, str, sx + scale, sy + scale, scale, '#000');
+  drawTextRaw(g, str, sx, sy, scale, color);
+}
+
+
+/* ==========================================================================
+   5. SPRITE-OK
+   ========================================================================== */
+function buildSprite(rows, colors) {
+  const h = rows.length;
+  const w = rows[0].length;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const ch = rows[y][x];
+      if (ch !== '.' && colors[ch]) {
+        g.fillStyle = colors[ch];
+        g.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+  return c;
+}
+
+// THE OLD ONE – programból generált nagy sprite
+function buildOldOneRows() {
+  const SW = 44, SH = 18;
+  const rows = [];
+  for (let y = 0; y < SH; y++) {
+    let row = '';
+    for (let x = 0; x < SW; x++) {
+      let ch = '.';
+      const dx = (x - 26) / 17;
+      const dy = (y - 9) / 7.5;
+      const inBody = dx * dx + dy * dy <= 1;
+      if (inBody) ch = y >= 12 ? 's' : 'a';
+      if (x <= 10) {
+        const half = 1.5 + (10 - x) * 0.55;
+        const dist = Math.abs(y - 9);
+        if (dist <= half && dist >= (10 - x) * 0.2) ch = 'c';
+      }
+      if ((y === 1 || y === 2) && x >= 18 && x <= 30) ch = 'b';
+      if (y === 0 && x >= 22 && x <= 27) ch = 'b';
+      if ((y === 12 || y === 13) && x >= 24 && x <= 27) ch = 'b';
+      if (ch === 'a' && (x * 7 + y * 13) % 23 === 0) ch = 'b';
+      if (y === 11 && x >= 33 && x <= 42 && inBody) ch = 'b';
+      if (y === 12 && x >= 34 && x <= 41 && x % 2 === 0 && inBody) ch = 'w';
+      if ((x === 36 || x === 37) && y === 6) ch = 'e';
+      row += ch;
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+// A ragadozó cápa sprite-ja (32x12), szintén generálva
+function buildSharkRows() {
+  const SW = 32, SH = 12;
+  const rows = [];
+  for (let y = 0; y < SH; y++) {
+    let row = '';
+    for (let x = 0; x < SW; x++) {
+      let ch = '.';
+      const dx = (x - 18) / 13;
+      const dy = (y - 6) / 4.2;
+      const inBody = dx * dx + dy * dy <= 1;
+      if (inBody) ch = y >= 7 ? 's' : 'a';
+      if (x <= 6) {
+        const half = (6 - x) * 0.9 + 0.5;
+        const dist = Math.abs(y - 6);
+        if (dist <= half && dist >= (6 - x) * 0.35) ch = 'c';
+      }
+      if (y === 0 && x === 18) ch = 'b';
+      if (y === 1 && x >= 17 && x <= 18) ch = 'b';
+      if (y === 2 && x >= 16 && x <= 19) ch = 'b';
+      if (ch === 'a' && (x === 21 || x === 23) && y >= 4 && y <= 6) ch = 'b';
+      if (y === 8 && x >= 23 && x <= 29 && inBody) ch = 'b';
+      if (y === 9 && x >= 24 && x <= 28 && x % 2 === 0 && inBody) ch = 'w';
+      if (x === 27 && y === 4) ch = 'e';
+      row += ch;
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+const PERSON_ROWS = [
+  '..hhh...',
+  '.hhhhh..',
+  '..sss...',
+  '..sse...',
+  '.jjjj...',
+  '.jjjjs..',
+  '.jjjj...',
+  '.jjjj...'
+];
+
+const BOAT_ROWS = [
+  'b' + '.'.repeat(24) + 'b',
+  'b'.repeat(26),
+  '.b' + 'w'.repeat(22) + 'b.',
+  '..' + 'b'.repeat(22) + '..',
+  '...' + 'b'.repeat(20) + '...'
+];
+
+const HOOK_ROWS = ['..g', '..g', 'g.g', '.g.'];
+
+
+/* ==========================================================================
+   6. HALFAJOK
+   minLevel: ettől a körtől jelenik meg a faj
+   timeBonus: ennyi mp-et ad a kifogása (minél nehezebb, annál többet)
+   ========================================================================== */
+const SPECIES = {
+  minnow: {
+    name: 'MINNOW', points: 10, timeBonus: 1, rarity: 1, minLevel: 1,
+    depth: [0.03, 0.32], speed: 34, stamina: 15, regen: 2, pull: 6, aggression: 0.3,
+    bite: 0.75, weight: [0.05, 0.2],
+    motion: { amp: 1, freq: 6, drift: 6, wander: [2, 4], burstMul: 2.2, burstEvery: [1, 2.5], burstLen: 0.3 },
+    spawnDay: 40, spawnNight: 12,
+    rows: ['....aa..', 'c.aaaaa.', 'ccaaaaea', 'c.aaaa..'],
+    colors: { a: '#c3ccd6', c: '#7f8e9e', e: '#0a0a14' }
+  },
+
+  perch: {
+    name: 'PERCH', points: 20, timeBonus: 2, rarity: 2, minLevel: 1,
+    depth: [0.12, 0.6], speed: 24, stamina: 35, regen: 4, pull: 10, aggression: 0.5,
+    bite: 0.6, weight: [0.3, 1.2],
+    motion: { amp: 3, freq: 2, drift: 4, wander: [3, 5], burstMul: 1.6, burstEvery: [3, 6], burstLen: 0.4 },
+    spawnDay: 26, spawnNight: 12,
+    rows: ['....d.d....', '...ddddd...', 'c.aababaa..', 'ccabababaea', 'c.aababaa..', '...aaaa....'],
+    colors: { a: '#a6c24a', b: '#3d5a1c', d: '#e0662a', c: '#e0662a', e: '#0a0a14' }
+  },
+
+  puffer: {
+    name: 'PUFFER', points: 30, timeBonus: 3, rarity: 3, minLevel: 2,
+    depth: [0.1, 0.55], speed: 14, stamina: 50, regen: 5, pull: 9, aggression: 0.6,
+    bite: 0.55, weight: [0.5, 2.0],
+    motion: { amp: 2, freq: 1.5, drift: 5, wander: [3, 6] },
+    spawnDay: 12, spawnNight: 8,
+    rows: ['...s.s.s..', '..aaaaaa..', 'c.aaaaaea.', 'ccaaaaaaaa', 'c.abbbbba.', '..aaaaaa..', '...s.s.s..'],
+    colors: { a: '#e8c860', b: '#fff4c0', s: '#8a6a20', c: '#8a6a20', e: '#101010' }
+  },
+
+  bass: {
+    name: 'BASS', points: 40, timeBonus: 4, rarity: 4, minLevel: 1,
+    depth: [0.33, 0.68], speed: 20, stamina: 55, regen: 4, pull: 11, aggression: 0.8,
+    bite: 0.55, weight: [1.5, 4.0],
+    motion: { amp: 1.5, freq: 1.2, drift: 8, wander: [2, 4], burstMul: 2.8, burstEvery: [2.5, 5], burstLen: 0.5 },
+    spawnDay: 14, spawnNight: 16,
+    rows: [
+      '......dddd......',
+      '....dddddddd....',
+      'c..aaaaaaaaaaa..',
+      'cc.aaaaaaaaaaea.',
+      'cccaaaaaaaaaaaaa',
+      'cc.aabbbbbbbaa..',
+      'c...aaaaaaaa....'
+    ],
+    colors: { a: '#5e8c3a', b: '#cfe0a4', d: '#3b6122', c: '#3b6122', e: '#f2e46a' }
+  },
+
+  needle: {
+    name: 'NEEDLEFISH', points: 60, timeBonus: 5, rarity: 5, minLevel: 3,
+    depth: [0.25, 0.7], speed: 40, stamina: 60, regen: 4, pull: 10, aggression: 1.0,
+    bite: 0.5, weight: [0.8, 2.5],
+    motion: { amp: 1, freq: 3, drift: 12, wander: [1, 2.5], burstMul: 3, burstEvery: [1.2, 2.5], burstLen: 0.35 },
+    spawnDay: 8, spawnNight: 7,
+    rows: ['..dddd............', 'ccaaaaaaaaaaaeaaaa', '..aaaaaaaaaa......'],
+    colors: { a: '#7fd6c8', d: '#3a8a80', c: '#3a8a80', e: '#101010' }
+  },
+
+  eel: {
+    name: 'EEL', points: 50, timeBonus: 5, rarity: 6, minLevel: 1,
+    depth: [0.48, 0.95], speed: 22, stamina: 65, regen: 4, pull: 11, aggression: 0.9,
+    bite: 0.5, weight: [1.0, 3.5],
+    motion: { amp: 6, freq: 3, drift: 10, wander: [1.5, 3], turnEvery: [1.5, 3.5], turnChance: 0.45 },
+    wiggle: 1,
+    spawnDay: 10, spawnNight: 14,
+    rows: ['...dddddddddddddd...', 'caaaaaaaaaaaaaaaaaea', '..aaaaaaaaaaaaaaaa..'],
+    colors: { a: '#6e5c3a', d: '#4a3d26', c: '#4a3d26', e: '#eae060' }
+  },
+
+  squid: {
+    name: 'GLOW SQUID', points: 90, timeBonus: 7, rarity: 7, minLevel: 4,
+    depth: [0.6, 0.96], speed: 16, stamina: 80, regen: 5, pull: 12, aggression: 1.0,
+    bite: 0.45, weight: [2, 6],
+    motion: { amp: 3, freq: 2, drift: 8, wander: [1.5, 3], burstMul: 3.5, burstEvery: [1, 2], burstLen: 0.25,
+              turnEvery: [2, 4], turnChance: 0.3 },
+    glow: 10,
+    spawnDay: 6, spawnNight: 10,
+    rows: ['.......aaaaa..', 't.t..aaaaaaaa.', 'ttttaaaaaaaeaa', 'ttttaaaaaaaaaa', 't.t..aaaaaaaa.', '.......aaaaa..'],
+    colors: { a: '#c05a9a', t: '#8a3a70', e: '#fff0a0' }
+  },
+
+  angler: {
+    name: 'ANGLER', points: 80, timeBonus: 8, rarity: 8, minLevel: 1,
+    depth: [0.68, 0.97], speed: 12, stamina: 90, regen: 5, pull: 13, aggression: 1.0,
+    bite: 0.5, weight: [5, 14],
+    motion: { amp: 2, freq: 1, drift: 3, wander: [4, 7], burstMul: 3.2, burstEvery: [4, 8], burstLen: 0.4 },
+    lure: { x: 15, y: 2 },
+    spawnDay: 8, spawnNight: 12,
+    rows: [
+      '........ddddddd...',
+      '.......aaaaaaa.d..',
+      'c...aaaaaaaaaa.l..',
+      'cc.aaaaaaaaaaae...',
+      'ccaaaaaaaaaaaaaww.',
+      'cc.aaaaaaaaaaaww..',
+      'c...aaaaaaaaaaaa..',
+      '.....aaaaaaaa.....'
+    ],
+    colors: { a: '#5b4a70', d: '#3a2e4c', c: '#3a2e4c', e: '#eaf6f6', w: '#f4f4f4', l: '#9ff6ff' }
+  },
+
+  goldfin: {
+    name: 'GOLDFIN', points: 150, timeBonus: 6, rarity: 9, minLevel: 1, rare: true,
+    depth: [0.05, 0.95], speed: 48, stamina: 50, regen: 4, pull: 11, aggression: 0.9,
+    bite: 0.3, weight: [0.4, 0.9],
+    motion: { amp: 2, freq: 5, drift: 22, wander: [0.6, 1.2], burstMul: 1.8, burstEvery: [1, 2], burstLen: 0.3 },
+    sparkle: true, glow: 9,
+    spawnDay: 1.2, spawnNight: 2.5,
+    rows: ['...ddd...', 'c.aaaaa..', 'ccaaaaaea', 'c.aaaaa..', '...dd....'],
+    colors: { a: '#ffc62a', d: '#ff8a1c', c: '#ff8a1c', e: '#2a0e00' }
+  },
+
+  koi: {
+    name: 'CRYSTAL KOI', points: 200, timeBonus: 8, rarity: 10, minLevel: 5, rare: true,
+    depth: [0.1, 0.8], speed: 30, stamina: 70, regen: 5, pull: 11, aggression: 0.9,
+    bite: 0.3, weight: [1, 3],
+    motion: { amp: 2, freq: 2, drift: 10, wander: [1, 2] },
+    sparkle: true, glow: 9,
+    spawnDay: 0.8, spawnNight: 1.5,
+    rows: ['....dddd....', 'c..aaaaaaa..', 'cc.aabbaaaea', 'cc.aaaabbaaa', 'c..aaaaaaa..', '....dd......'],
+    colors: { a: '#f4f4ff', b: '#ff5a3a', d: '#b8c8ff', c: '#b8c8ff', e: '#101010' }
+  },
+
+  oldone: {
+    name: 'THE OLD ONE', points: 300, timeBonus: 20, rarity: 11, minLevel: 1, rare: true,
+    depth: [0.74, 0.95], speed: 7, stamina: 220, regen: 6, pull: 16, aggression: 1.2,
+    bite: 0.35, weight: [80, 140],
+    motion: { amp: 5, freq: 0.6, drift: 2, wander: [5, 9] },
+    mouthOffset: 2,
+    eye: { x: 36, y: 6 },
+    spawnDay: 0, spawnNight: 0,
+    rows: buildOldOneRows(),
+    colors: { a: '#3d4c48', s: '#55665f', b: '#26302d', c: '#26302d', e: '#d8ff9a', w: '#d8d0b0' }
+  }
+};
+
+// Becenevek a kifogott halaknak nyelvenként (szabadon bővíthető)
+const NICKS = {
+  en: {
+    names: ['BOB', 'GUS', 'DOUG', 'WANDA', 'BERTHA', 'CHUCK', 'LOLA', 'OTTO', 'ROSIE', 'WALLY', 'MAVIS',
+      'TEDDY', 'BISCUIT', 'NORMAN', 'PICKLES', 'ZIGGY', 'MUFFIN', 'BARNABY', 'GERALD', 'PEGGY'],
+    big: ['BIG', 'CHUNKY', 'MIGHTY', 'HEFTY', 'LARGE'],
+    small: ['LIL', 'TINY', 'WEE', 'SHRIMPY', 'MINI'],
+    mid: ['SNEAKY', 'GRUMPY', 'LAZY', 'HAPPY', 'SLY', 'SLEEPY', 'CHEEKY', 'FUNKY', 'SLIPPERY']
+  },
+  fr: {
+    names: ['GASTON', 'MARCEL', 'JOJO', 'LULU', 'FIFI', 'DÉDÉ', 'BÉBERT', 'GIGI', 'MIMILE', 'NINON',
+      'ROGER', 'PIERROT', 'COCO', 'LOULOU', 'JULOT', 'FANFAN', 'TITOU', 'NÉNETTE'],
+    big: ['GROS', 'COSTAUD', 'ÉNORME', 'MASSIF'],
+    small: ["P'TIT", 'MINI', 'MINUS', 'PETIT'],
+    mid: ['RUSÉ', 'GROGNON', 'PARESSEUX', 'JOYEUX', 'FILOU', 'ENDORMI', 'COQUIN', 'TÊTU', 'MALIN']
+  }
+};
+
+function makeNickname(f) {
+  if (f.key === 'oldone') return fishName('oldone');
+  const pool = NICKS[lang] || NICKS.en;
+  const sp = f.sp;
+  const r = (f.weight - sp.weight[0]) / (sp.weight[1] - sp.weight[0]);
+  const adj = r > 0.75 ? pool.big : r < 0.25 ? pool.small : pool.mid;
+  return `${choice(adj)} ${choice(pool.names)}`;
+}
+
+// Sprite-ok előrenderelése
+const SPRITES = {};
+for (const key of Object.keys(SPECIES)) SPRITES[key] = buildSprite(SPECIES[key].rows, SPECIES[key].colors);
+SPRITES.shark = buildSprite(buildSharkRows(), {
+  a: '#6f7f8f', s: '#c8d0d8', b: '#3a4450', c: '#4f5d6b', e: '#ff3030', w: '#ffffff'
+});
+SPRITES.hook = buildSprite(HOOK_ROWS, { g: '#d4d6de' });
+
+// Játékosonkénti megjelenés
+const PLAYER_STYLE = [
+  {
+    tag: '#ffc933', line: '#ececec',
+    person: buildSprite(PERSON_ROWS, { h: '#d8452a', s: '#f2c08a', e: '#101010', j: '#f0b020' }),
+    boat: buildSprite(BOAT_ROWS, { b: '#8a5226', w: '#efe6cc' })
+  },
+  {
+    tag: '#5fd0ff', line: '#ffe9a8',
+    person: buildSprite(PERSON_ROWS, { h: '#2a6ad8', s: '#e8b27c', e: '#101010', j: '#3fbf6a' }),
+    boat: buildSprite(BOAT_ROWS, { b: '#3b5f7a', w: '#e6f0ff' })
+  }
+];
+
+function drawSprite(g, img, x, y, flipX = false, flipY = false, wiggle = 0, t = 0) {
+  const w = img.width;
+  const h = img.height;
+  g.save();
+  g.translate(Math.round(x) + (flipX ? w : 0), Math.round(y) + (flipY ? h : 0));
+  g.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+  if (wiggle) {
+    for (let c = 0; c < w; c++) {
+      const off = Math.round(Math.sin(t * 8 + c * 0.55) * wiggle);
+      g.drawImage(img, c, 0, 1, h, c, off, 1, h);
+    }
+  } else {
+    g.drawImage(img, 0, 0);
+  }
+  g.restore();
+}
+
+function pixelLine(g, x0, y0, x1, y1, color) {
+  x0 = Math.round(x0); y0 = Math.round(y0);
+  x1 = Math.round(x1); y1 = Math.round(y1);
+  g.fillStyle = color;
+  const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  const dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (let guard = 0; guard < 2000; guard++) {
+    g.fillRect(x0, y0, 1, 1);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+
+function drawPixelCircle(g, cx, cy, r, color) {
+  g.fillStyle = color;
+  for (let y = -r; y <= r; y++) {
+    for (let x = -r; x <= r; x++) {
+      if (x * x + y * y <= r * r + r * 0.8) g.fillRect(cx + x, cy + y, 1, 1);
+    }
+  }
+}
+
+
+/* ==========================================================================
+   7. HANG
+   ========================================================================== */
+const Sound = {
+  ac: null,
+  muted: false,
+
+  init() {
+    if (this.ac) {
+      if (this.ac.state === 'suspended') this.ac.resume();
+      Music.unlock();
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) this.ac = new AC();
+    Music.unlock();   // az első gombnyomásnál a zene is elindulhat
+  },
+
+  tone(freq, dur, opts = {}) {
+    if (!this.ac || this.muted) return;
+    const { type = 'square', slide = null, delay = 0 } = opts;
+    const vol = (opts.vol || 0.04) * settings.sfx;
+    if (vol <= 0.0001) return;
+    const t0 = this.ac.currentTime + delay;
+    const osc = this.ac.createOscillator();
+    const gain = this.ac.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (slide) osc.frequency.exponentialRampToValueAtTime(slide, t0 + dur);
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain);
+    gain.connect(this.ac.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  },
+
+  bite()      { this.tone(440, 0.12, { slide: 880 }); },
+  tug()       { this.tone(170, 0.06, { type: 'triangle', vol: 0.07 }); },
+  mash()      { this.tone(900, 0.02, { vol: 0.015 }); },
+  warn()      { this.tone(1400, 0.08, { vol: 0.05 }); this.tone(1400, 0.08, { vol: 0.05, delay: 0.12 }); },
+  struggle()  { this.tone(110, 0.1, { type: 'sawtooth', vol: 0.025 }); },
+  snap()      { this.tone(900, 0.3, { type: 'sawtooth', slide: 60, vol: 0.05 }); },
+  rumble()    { this.tone(58, 1.4, { type: 'triangle', vol: 0.14, slide: 38 }); },
+  event()     { this.tone(660, 0.08); this.tone(990, 0.12, { delay: 0.08 }); },
+  tick()      { this.tone(1200, 0.03, { vol: 0.03 }); },
+  select()    { this.tone(740, 0.05, { vol: 0.03 }); },
+
+  // Cápa: riasztó szirénahang érkezéskor
+  predatorAlarm() {
+    for (let i = 0; i < 6; i++) {
+      this.tone(i % 2 ? 247 : 330, 0.13, { delay: i * 0.16, vol: 0.06 });
+    }
+  },
+  // Cápa: vadászat kezdete
+  predatorSting() { this.tone(200, 0.3, { type: 'sawtooth', slide: 520, vol: 0.05 }); },
+  // Cápa: szívverés, amíg a képernyőn van
+  heartbeat() {
+    this.tone(55, 0.12, { type: 'sine', vol: 0.2 });
+    this.tone(50, 0.1, { type: 'sine', vol: 0.14, delay: 0.14 });
+  },
+  chomp() {
+    this.tone(160, 0.2, { slide: 40, vol: 0.08 });
+    this.tone(90, 0.25, { type: 'sawtooth', delay: 0.05, vol: 0.05 });
+  },
+
+  catchFish(rare) {
+    const notes = rare ? [523, 659, 784, 1047, 1319] : [523, 659, 784];
+    notes.forEach((n, i) => this.tone(n, 0.1, { delay: i * 0.07 }));
+  },
+  roundClear() {
+    [523, 659, 784, 1047, 784, 1047, 1319].forEach((n, i) => this.tone(n, 0.11, { delay: i * 0.1 }));
+  },
+  gameOver() {
+    [523, 392, 330, 262].forEach((n, i) => this.tone(n, 0.2, { delay: i * 0.16, type: 'triangle', vol: 0.07 }));
+  }
+};
+
+/* --------------------------------------------------------------------------
+   HÁTTÉRZENE – három lejátszási lista, mindegyik végtelenítve, a számok felváltva.
+     menu  : főmenü és Game Over
+     day   : nappali játék
+     night : éjszakai játék
+   Váltáskor a régi zene kihalkul, az új felhangosodik (áttűnés).
+   Új szám: tedd a fájlt a játék mellé, és írd be a nevét a megfelelő listába.
+   -------------------------------------------------------------------------- */
+const Music = {
+  PLAYLISTS: {
+    menu: ['menu.mp3'],
+    day: ['day1.mp3', 'day2.mp3', 'day3.mp3'],
+    night: ['night1.mp3', 'night2.mp3', 'night3.mp3']
+  },
+  FADE_TIME: 1.5,     // áttűnés hossza (mp)
+
+  cur: null,          // ami most szól: { audio, list, index, fade, errors, dead }
+  out: null,          // ami éppen kihalkul
+  wanted: 'menu',     // melyik listának kellene szólnia
+  unlocked: false,    // böngészőben csak felhasználói művelet után szólhat
+  duck: 1,            // szünetben halkabb
+
+  init() {
+    this.applyVolume();
+  },
+
+  makeTrack(list) {
+    const tr = { audio: new Audio(), list, index: 0, fade: 0, errors: 0, dead: false };
+    tr.audio.preload = 'auto';
+    tr.audio.addEventListener('ended', () => { if (!tr.dead) this.nextTrack(tr); });
+    tr.audio.addEventListener('playing', () => { tr.errors = 0; });
+    tr.audio.addEventListener('error', () => {
+      // hiányzó / hibás fájl: továbblép a következőre, de nem pörög végtelenül
+      if (tr.dead) return;
+      tr.errors++;
+      if (tr.errors < this.PLAYLISTS[list].length) this.nextTrack(tr);
+    });
+    tr.audio.src = this.PLAYLISTS[list][0];
+    return tr;
+  },
+
+  nextTrack(tr) {
+    const list = this.PLAYLISTS[tr.list];
+    tr.index = (tr.index + 1) % list.length;
+    tr.audio.src = list[tr.index];
+    if (tr === this.cur) this.tryPlay(tr);
+  },
+
+  tryPlay(tr) {
+    const p = tr.audio.play();
+    if (p && p.catch) p.catch(() => { this.unlocked = false; });
+  },
+
+  // Átváltás egy másik lejátszási listára (ha már az szól, nem történik semmi)
+  play(list) {
+    this.wanted = list;
+    if (!this.unlocked) return;
+    if (this.cur && this.cur.list === list) return;
+    if (this.out) {
+      this.out.dead = true;
+      this.out.audio.pause();
+    }
+    this.out = this.cur;
+    this.cur = this.makeTrack(list);
+    this.applyVolume();
+    this.tryPlay(this.cur);
+  },
+
+  // Az első gombnyomásnál / kattintásnál hívódik (az .exe-ben azonnal)
+  unlock() {
+    if (this.unlocked) return;
+    this.unlocked = true;
+    if (this.cur && this.cur.list === this.wanted) this.tryPlay(this.cur);
+    else this.play(this.wanted);
+  },
+
+  // Minden képkockában: áttűnés
+  update(dt) {
+    const step = dt / this.FADE_TIME;
+    if (this.cur && this.cur.fade < 1) this.cur.fade = Math.min(1, this.cur.fade + step);
+    if (this.out) {
+      this.out.fade -= step;
+      if (this.out.fade <= 0) {
+        this.out.dead = true;
+        this.out.audio.pause();
+        this.out = null;
+      }
+    }
+    this.applyVolume();
+  },
+
+  setDuck(v) {
+    this.duck = v;
+    this.applyVolume();
+  },
+
+  applyVolume() {
+    const base = Sound.muted ? 0 : settings.music * this.duck;
+    for (const tr of [this.cur, this.out]) {
+      if (tr) tr.audio.volume = clamp(base * tr.fade, 0, 1);
+    }
+  }
+};
+
+
+/* ==========================================================================
+   8. JÁTÉKÁLLAPOT, JÁTÉKOSOK
+   ========================================================================== */
+const game = {
+  state: 'start',        // 'start' | 'playing' | 'paused' | 'roundclear' | 'gameover'
+  stateTime: 0,
+  numPlayers: 1,
+  mode: 'day',
+  time: 0,
+  level: 1,
+  target: CONFIG.TARGET_BASE,
+  timeLeft: CONFIG.ROUND_DURATION,
+  clearTimer: 0,
+  diff: null,            // aktuális nehézségi szorzók
+  players: [],
+  fish: [],
+  predator: null,
+  predatorTimer: 999,
+  spawnTimer: 0,
+  event: null,
+  eventTimer: 0,
+  eventCooldown: CONFIG.EVENT_START_DELAY,
+  oldOneActive: false,
+  shake: 0,
+  lastTick: -1,
+  timeFlash: 0           // a HUD idő zölden villan bónusznál
+};
+
+const effects = { particles: [], bubbles: [], popups: [], banners: [] };
+const world = { weeds: [], clouds: [], stars: [] };
+const bestScores = Object.assign({ day: 0, night: 0 }, Store.get('best', {}));
+
+function makePlayer(index, count) {
+  const startX = count === 1 ? W / 2 : (index === 0 ? W * 0.3 : W * 0.7);
+  return {
+    index,
+    style: PLAYER_STYLE[index],
+    hook: { x: startX, y: HOOK_MIN_Y + 30, state: 'free', fish: null, tension: 0, overload: 0 },
+    boat: { x: startX },
+    score: 0,
+    roundScore: 0,
+    caught: 0,
+    roundWins: 0,
+    eaten: 0,
+    biggest: null,
+    rarest: null,
+    log: [],
+    reelVel: 0,          // gombnyomkodásból származó tekerési lendület
+    sinceAction: 99,     // utolsó rántás/tekerés óta eltelt idő
+    in: { left: false, right: false, up: false, down: false, tug: false, reel: false }
+  };
+}
+
+function computeDifficulty(level) {
+  const L = level - 1;
+  return {
+    speed: 1 + CONFIG.LEVEL_SPEED_STEP * L,
+    stamina: 1 + CONFIG.LEVEL_STAMINA_STEP * L,
+    bite: Math.max(CONFIG.LEVEL_BITE_MIN, 1 - CONFIG.LEVEL_BITE_STEP * L),
+    decay: Math.max(CONFIG.LEVEL_DECAY_MIN, 1 - CONFIG.LEVEL_DECAY_STEP * L),
+    predator: 1 + CONFIG.LEVEL_PREDATOR_STEP * L,
+    time: Math.max(CONFIG.LEVEL_TIME_MIN, 1 - CONFIG.LEVEL_TIME_STEP * L)
+  };
+}
+game.diff = computeDifficulty(1);
+
+
+/* ==========================================================================
+   9. BEMENET: BILLENTYŰZET + KONTROLLER
+   ========================================================================== */
+// Billentyűkiosztás játékosonként. 1 játékos módban mindkét kiosztás P1-et irányítja.
+const KEYMAP = [
+  {
+    left: ['ArrowLeft'], right: ['ArrowRight'], up: ['ArrowUp'], down: ['ArrowDown'],
+    tug: ['Space', 'Slash'], reel: ['Enter', 'NumpadEnter', 'Period']
+  },
+  {
+    left: ['KeyA'], right: ['KeyD'], up: ['KeyW'], down: ['KeyS'],
+    tug: ['KeyF'], reel: ['KeyG']
+  }
+];
+
+const keys = Object.create(null);
+const kbEdge = [{ tug: false, reel: false }, { tug: false, reel: false }];
+const BLOCK_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Enter', 'Slash'];
+
+window.addEventListener('keydown', (e) => {
+  Sound.init();
+  if (BLOCK_KEYS.includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  if (e.repeat) return;
+  onKeyPress(e.code);
+});
+
+window.addEventListener('keyup', (e) => {
+  if (BLOCK_KEYS.includes(e.code)) e.preventDefault();
+  keys[e.code] = false;
+});
+
+window.addEventListener('blur', () => {
+  for (const k in keys) keys[k] = false;
+  if (game.state === 'playing') pauseGame();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && game.state === 'playing') pauseGame();
+});
+
+// Melyik játékoshoz tartozik egy akció-gomb?
+function playerForKey(code, action) {
+  for (let i = 0; i < KEYMAP.length; i++) {
+    if (KEYMAP[i][action].includes(code)) return game.numPlayers === 1 ? 0 : i;
+  }
+  return -1;
+}
+
+function onKeyPress(code) {
+  if (optionsOpen) {
+    handleOptionsKey(code);
+    return;
+  }
+  switch (game.state) {
+    case 'start':
+      if (code === 'ArrowUp' || code === 'KeyW') menuMove(-1);
+      else if (code === 'ArrowDown' || code === 'KeyS') menuMove(1);
+      else if (code === 'ArrowLeft' || code === 'KeyA') menuChange(-1);
+      else if (code === 'ArrowRight' || code === 'KeyD') menuChange(1);
+      else if (code === 'Digit1') menuSet('players', 1);
+      else if (code === 'Digit2') menuSet('players', 2);
+      else if (code === 'Enter' || code === 'Space') menuConfirm();
+      else if (code === 'Escape' && game.stateTime > 0.6) exitGame();
+      break;
+    case 'playing': {
+      const tp = playerForKey(code, 'tug');
+      const r = playerForKey(code, 'reel');
+      if (tp >= 0 && tp < game.players.length) kbEdge[tp].tug = true;
+      if (r >= 0 && r < game.players.length) kbEdge[r].reel = true;
+      if (code === 'KeyP' || code === 'Escape') pauseGame();
+      else if (code === 'KeyM') toggleMute();
+      break;
+    }
+    case 'paused':
+      if (code === 'ArrowUp' || code === 'KeyW') pauseMove(-1);
+      else if (code === 'ArrowDown' || code === 'KeyS') pauseMove(1);
+      else if (code === 'Enter' || code === 'Space') pauseSelect();
+      else if (code === 'KeyP' || code === 'Escape') resumeGame();
+      else if (code === 'KeyM') toggleMute();
+      break;
+    case 'gameover':
+      if (game.stateTime < 1.2) return;   // véletlen gombnyomkodás ne indítson rögtön újat
+      if (code === 'Enter' || code === 'Space') startGame();
+      else if (code === 'Escape') showMenu();
+      break;
+  }
+}
+
+// --- Kontroller (standard mapping: A=0, B=1, X=2, Y=3, RB=5, RT=7, Back=8, Start=9, D-pad=12..15)
+const padPrev = {};
+
+function readPads() {
+  if (!navigator.getGamepads) return [];
+  return Array.from(navigator.getGamepads()).filter((p) => p && p.connected);
+}
+
+function padSnapshot(pad) {
+  const b = (i) => !!(pad.buttons[i] && pad.buttons[i].pressed);
+  const ax = pad.axes[0] || 0;
+  const ay = pad.axes[1] || 0;
+  const dz = 0.4;
+  const held = {
+    left: b(14) || ax < -dz,
+    right: b(15) || ax > dz,
+    up: b(12) || ay < -dz,
+    down: b(13) || ay > dz,
+    reel: b(0) || b(7),          // A vagy RT: tekerés (nyomkodni kell!)
+    tug: b(1) || b(2) || b(5),   // B, X vagy RB: rántás
+    start: b(9),
+    back: b(8)
+  };
+  const prev = padPrev[pad.index] || {};
+  const edge = {};
+  for (const k of Object.keys(held)) edge[k] = held[k] && !prev[k];
+  padPrev[pad.index] = held;
+  return { held, edge };
+}
+
+// Minden képkockában: kontrollerek + billentyűzet -> játékos-bemenetek
+function pollInput() {
+  const snaps = readPads().map(padSnapshot);
+
+  // Menü és globális vezérlés kontrollerről
+  for (const s of snaps) {
+    const e = s.edge;
+    if (optionsOpen) {
+      if (e.up) optionsMove(-1);
+      if (e.down) optionsMove(1);
+      if (e.left) optionsAdjust(-1);
+      if (e.right) optionsAdjust(1);
+      if (e.reel && optSel === 2) closeOptions();
+      else if (e.tug || e.start || e.back) closeOptions();
+      continue;
+    }
+    if (game.state === 'start') {
+      if (e.up) menuMove(-1);
+      if (e.down) menuMove(1);
+      if (e.left) menuChange(-1);
+      if (e.right) menuChange(1);
+      if (e.start || e.reel) { Sound.init(); menuConfirm(); }
+      else if (e.back && game.stateTime > 0.6) exitGame();
+    } else if (game.state === 'playing') {
+      if (e.start) pauseGame();
+    } else if (game.state === 'paused') {
+      if (e.up) pauseMove(-1);
+      if (e.down) pauseMove(1);
+      if (e.reel) pauseSelect();
+      else if (e.start || e.tug) resumeGame();
+    } else if (game.state === 'gameover' && game.stateTime > 1.2) {
+      if (e.start || e.reel) startGame();
+      else if (e.back || e.tug) showMenu();
+    }
+  }
+
+  // Játékosok bemenete
+  const n = game.players.length;
+  for (let i = 0; i < n; i++) {
+    const p = game.players[i];
+    const maps = game.numPlayers === 1 ? KEYMAP : [KEYMAP[i]];
+    const held = (action) => maps.some((m) => m[action].some((c) => keys[c]));
+    const inp = {
+      left: held('left'), right: held('right'), up: held('up'), down: held('down'),
+      tug: kbEdge[i].tug, reel: kbEdge[i].reel
+    };
+    // 1P: bármelyik kontroller; 2P: 1. kontroller = P1, 2. kontroller = P2
+    const mine = game.numPlayers === 1 ? snaps : (snaps[i] ? [snaps[i]] : []);
+    for (const s of mine) {
+      inp.left = inp.left || s.held.left;
+      inp.right = inp.right || s.held.right;
+      inp.up = inp.up || s.held.up;
+      inp.down = inp.down || s.held.down;
+      inp.tug = inp.tug || s.edge.tug;
+      inp.reel = inp.reel || s.edge.reel;
+    }
+    p.in = inp;
+  }
+  for (const e of kbEdge) { e.tug = false; e.reel = false; }
+
+  updatePadStatus(snaps.length);
+}
+
+window.addEventListener('gamepadconnected', () => Sound.init());
+
+
+/* ==========================================================================
+   10. MENÜ ÉS DOM UI
+   ========================================================================== */
+const $ = (sel) => document.querySelector(sel);
+
+function panelRefs(root) {
+  return {
+    root,
+    fishName: root.querySelector('.fish-name'),
+    status: root.querySelector('.fight-status'),
+    depth: root.querySelector('.depth'),
+    fish: root.querySelector('.fish'),
+    rpts: root.querySelector('.rpts'),
+    stFill: root.querySelector('.stamina-fill'),
+    stVal: root.querySelector('.stamina-val'),
+    tFill: root.querySelector('.tension-fill'),
+    tVal: root.querySelector('.tension-val'),
+    rFill: root.querySelector('.reel-fill'),
+    rVal: root.querySelector('.reel-val')
+  };
+}
+
+const ui = {
+  p1Label: $('#p1-label'), p1Score: $('#p1-score'), p2Score: $('#p2-score'),
+  round: $('#round'), target: $('#target'), time: $('#time'), mode: $('#mode'),
+  panels: [panelRefs($('#panel-1')), panelRefs($('#panel-2'))],
+  startScreen: $('#start-screen'), gameoverScreen: $('#gameover-screen'),
+  menuRows: document.querySelectorAll('.menu-row'),
+  opts: document.querySelectorAll('.opt'),
+  menuDesc: $('#menu-desc'), padStatus: $('#pad-status'), btnStart: $('#btn-start'),
+  goTitle: $('#go-title'), goSub: $('#go-sub'), goStats: $('#go-stats'),
+  goRecord: $('#go-record'), goLog: $('#go-log'),
+  btnAgain: $('#btn-again'), btnMenu: $('#btn-menu'), btnExit: $('#btn-exit'),
+  pauseScreen: $('#pause-screen'), pauseOpts: Array.from(document.querySelectorAll('.pause-opt')),
+  btnOptions: $('#btn-options'), actBtns: document.querySelectorAll('.act-btn'),
+  optionsScreen: $('#options-screen'), volRows: Array.from(document.querySelectorAll('.vol-row')),
+  volBtns: document.querySelectorAll('.vol-btn'), btnOptBack: $('#btn-options-back')
+};
+
+function setText(el, txt) {
+  if (el._last !== txt) {
+    el.textContent = txt;
+    el._last = txt;
+  }
+}
+function setWidth(el, pct) {
+  const v = Math.round(clamp(pct, 0, 100));
+  if (el._w !== v) {
+    el.style.width = v + '%';
+    el._w = v;
+  }
+}
+function setClass(el, cls) {
+  if (el._cls !== cls) {
+    el.className = cls;
+    el._cls = cls;
+  }
+}
+
+const MENU_ROWS = [
+  { key: 'players', values: [1, 2] },
+  { key: 'mode', values: ['day', 'night'] },
+  { key: 'lang', values: LANGS },
+  { key: 'action', get values() { return isDesktop ? ['start', 'options', 'exit'] : ['start', 'options']; } }
+];
+const menu = { row: 0, players: 1, mode: 'day', lang, action: 'start' };
+
+function refreshMenu() {
+  ui.menuRows.forEach((r, i) => r.classList.toggle('active', i === menu.row));
+  ui.opts.forEach((b) => {
+    const val = b.dataset.row === 'players' ? Number(b.dataset.value) : b.dataset.value;
+    b.classList.toggle('selected', menu[b.dataset.row] === val);
+  });
+  ui.actBtns.forEach((b) => b.classList.toggle('selected', menu.row === 3 && b.dataset.act === menu.action));
+  ui.menuDesc.textContent = `${t('desc_' + menu.players)} ${t('desc_' + menu.mode)}`;
+}
+
+function menuMove(d) {
+  menu.row = (menu.row + d + MENU_ROWS.length) % MENU_ROWS.length;
+  if (menu.row !== 3) menu.action = 'start';
+  refreshMenu();
+  Sound.select();
+}
+
+function menuSet(key, value) {
+  menu[key] = value;
+  if (key === 'mode' && game.mode !== value) {
+    game.mode = value;
+    buildBackground(value);
+    populate();
+  }
+  if (key === 'lang' && lang !== value) setLanguage(value);
+  refreshMenu();
+  Sound.select();
+}
+
+// ENTER / A gomb a főmenüben: az alsó gombsoron a kijelölt gomb, máshol START
+function menuConfirm() {
+  if (menu.row === 3 && menu.action === 'options') openOptions('start');
+  else if (menu.row === 3 && menu.action === 'exit') exitGame();
+  else startGame();
+}
+
+// Balra/jobbra lépteti az aktív menüsor értékét
+function menuChange(dir = 1) {
+  const row = MENU_ROWS[menu.row];
+  const i = row.values.indexOf(menu[row.key]);
+  menuSet(row.key, row.values[(i + dir + row.values.length) % row.values.length]);
+}
+
+ui.opts.forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    if (game.state !== 'start') return;
+    Sound.init();
+    const key = btn.dataset.row;
+    menu.row = MENU_ROWS.findIndex((r) => r.key === key);
+    menuSet(key, key === 'players' ? Number(btn.dataset.value) : btn.dataset.value);
+  });
+});
+
+// --- Nyelv váltása: minden data-i18n elem szövege frissül
+function setLanguage(code) {
+  lang = code;
+  menu.lang = code;
+  Store.set('lang', code);
+  applyI18n();
+}
+
+function applyI18n() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  lastPadCount = -1;
+  if (game.state === 'start') buildBackground(game.mode);   // a mélységzóna-feliratok miatt
+  refreshMenu();
+}
+
+// --- Asztali (.exe) verzió: a preload.js adja a window.desktop objektumot
+const isDesktop = !!(window.desktop && window.desktop.quit);
+document.body.classList.toggle('desktop', isDesktop);
+
+function exitGame() {
+  if (isDesktop) window.desktop.quit();
+}
+
+ui.btnExit.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  exitGame();
+});
+
+// --- Szünet menü
+let pauseSel = 0;
+
+function pauseOptions() {
+  return ui.pauseOpts.filter((b) => isDesktop || !b.classList.contains('desktop-only'));
+}
+
+function refreshPause() {
+  pauseOptions().forEach((b, i) => b.classList.toggle('selected', i === pauseSel));
+}
+
+function pauseMove(d) {
+  const n = pauseOptions().length;
+  pauseSel = (pauseSel + d + n) % n;
+  refreshPause();
+  Sound.select();
+}
+
+function pauseSelect() {
+  const b = pauseOptions()[pauseSel];
+  if (b) doPauseAction(b.dataset.action);
+}
+
+function doPauseAction(action) {
+  if (action === 'resume') resumeGame();
+  else if (action === 'restart') startGame();
+  else if (action === 'options') openOptions('pause');
+  else if (action === 'menu') showMenu();
+  else if (action === 'exit') exitGame();
+}
+
+ui.pauseOpts.forEach((b) => {
+  b.addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    if (game.state === 'paused' && !optionsOpen) doPauseAction(b.dataset.action);
+  });
+});
+
+// --- OPTIONS: zene és effektek hangereje
+let optionsOpen = false;
+let optionsReturn = 'start';
+let optSel = 0;                    // 0 = zene, 1 = effektek, 2 = vissza
+const VOL_KEYS = ['music', 'sfx'];
+
+function openOptions(from) {
+  optionsOpen = true;
+  optionsReturn = from;
+  optSel = 0;
+  ui.startScreen.classList.add('hidden');
+  ui.pauseScreen.classList.add('hidden');
+  ui.optionsScreen.classList.remove('hidden');
+  refreshOptions();
+  Sound.select();
+}
+
+function closeOptions() {
+  optionsOpen = false;
+  Store.set('volume', settings);
+  ui.optionsScreen.classList.add('hidden');
+  if (optionsReturn === 'start' && game.state === 'start') ui.startScreen.classList.remove('hidden');
+  else if (game.state === 'paused') ui.pauseScreen.classList.remove('hidden');
+  Sound.select();
+}
+
+function refreshOptions() {
+  ui.volRows.forEach((row, i) => {
+    const key = row.dataset.vol;
+    const pct = Math.round(settings[key] * 100);
+    row.classList.toggle('active', i === optSel);
+    row.querySelector('.vol-fill').style.width = pct + '%';
+    row.querySelector('.vol-val').textContent = pad(pct, 3) + '%';
+  });
+  ui.btnOptBack.classList.toggle('selected', optSel === 2);
+}
+
+function optionsMove(d) {
+  optSel = (optSel + d + 3) % 3;
+  refreshOptions();
+  Sound.select();
+}
+
+function changeVolume(key, dir) {
+  settings[key] = clamp(Math.round((settings[key] + dir * 0.1) * 10) / 10, 0, 1);
+  Music.applyVolume();
+  refreshOptions();
+  Store.set('volume', settings);
+  if (key === 'sfx') Sound.select();   // hallod az új effekt-hangerőt
+}
+
+function optionsAdjust(dir) {
+  if (optSel < 2) changeVolume(VOL_KEYS[optSel], dir);
+}
+
+function handleOptionsKey(code) {
+  if (code === 'ArrowUp' || code === 'KeyW') optionsMove(-1);
+  else if (code === 'ArrowDown' || code === 'KeyS') optionsMove(1);
+  else if (code === 'ArrowLeft' || code === 'KeyA') optionsAdjust(-1);
+  else if (code === 'ArrowRight' || code === 'KeyD') optionsAdjust(1);
+  else if ((code === 'Enter' || code === 'Space') && optSel === 2) closeOptions();
+  else if (code === 'Escape' || code === 'KeyP' || code === 'Backspace') closeOptions();
+  else if (code === 'KeyM') toggleMute();
+}
+
+ui.volBtns.forEach((b) => {
+  b.addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    Sound.init();
+    const key = b.closest('.vol-row').dataset.vol;
+    optSel = VOL_KEYS.indexOf(key);
+    changeVolume(key, Number(b.dataset.dir));
+  });
+});
+
+ui.btnOptions.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  Sound.init();
+  if (game.state === 'start' && !optionsOpen) openOptions('start');
+});
+
+ui.btnOptBack.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  if (optionsOpen) closeOptions();
+});
+
+ui.btnStart.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  Sound.init();
+  if (game.state === 'start' && !optionsOpen) startGame();
+});
+
+ui.btnAgain.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  Sound.init();
+  if (game.state === 'gameover') startGame();
+});
+
+ui.btnMenu.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  if (game.state === 'gameover') showMenu();
+});
+
+let lastPadCount = -1;
+function updatePadStatus(count) {
+  if (count === lastPadCount) return;
+  lastPadCount = count;
+  if (count === 0) {
+    ui.padStatus.textContent = t('pad_none');
+    ui.padStatus.classList.remove('on');
+  } else {
+    ui.padStatus.textContent = count === 1 ? t('pad_one') : t('pad_many', { n: count });
+    ui.padStatus.classList.add('on');
+  }
+}
+
+
+/* ==========================================================================
+   11. HÁTTÉR GENERÁLÁSA
+   ========================================================================== */
+function buildBackground(mode) {
+  const g = bgCtx;
+  const pal = PALETTES[mode];
+  g.clearRect(0, 0, W, H);
+
+  const skyN = pal.sky.length;
+  for (let i = 0; i < skyN; i++) {
+    const y0 = Math.floor(i * SURFACE_Y / skyN);
+    const y1 = Math.floor((i + 1) * SURFACE_Y / skyN);
+    g.fillStyle = pal.sky[i];
+    g.fillRect(0, y0, W, y1 - y0);
+  }
+
+  world.stars = [];
+  world.clouds = [];
+  if (mode === 'night') {
+    for (let i = 0; i < 45; i++) {
+      g.fillStyle = choice(['#ffffff', '#9fb4ff', '#ffe9b0', '#6f7fa8']);
+      g.fillRect(randInt(0, W - 1), randInt(0, SURFACE_Y - 10), 1, 1);
+    }
+    for (let i = 0; i < 12; i++) {
+      world.stars.push({ x: randInt(0, W - 1), y: randInt(0, SURFACE_Y - 10), phase: rand(0, 6) });
+    }
+    drawPixelCircle(g, 262, 12, 6, '#e8e6cc');
+    g.fillStyle = '#c9c6a8';
+    g.fillRect(259, 10, 2, 2);
+    g.fillRect(264, 14, 2, 1);
+    g.fillRect(263, 8, 1, 1);
+  } else {
+    drawPixelCircle(g, 262, 13, 8, '#fff1a8');
+    drawPixelCircle(g, 262, 13, 6, '#ffd84a');
+    for (let i = 0; i < 4; i++) {
+      world.clouds.push({ x: rand(0, W), y: randInt(5, 15), w: randInt(14, 28), speed: rand(2, 5) });
+    }
+  }
+
+  g.fillStyle = pal.hills;
+  for (let x = 0; x < W; x++) {
+    const h = 5 + Math.round(2 * Math.sin(x * 0.045) + 2 * Math.sin(x * 0.11 + 1));
+    g.fillRect(x, SURFACE_Y - h, 1, h);
+  }
+
+  const n = pal.water.length;
+  for (let i = 0; i < n; i++) {
+    const y0 = SURFACE_Y + Math.floor(i * WATER_H / n);
+    const y1 = SURFACE_Y + Math.floor((i + 1) * WATER_H / n);
+    g.fillStyle = pal.water[i];
+    g.fillRect(0, y0, W, y1 - y0);
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const yb = SURFACE_Y + Math.floor((i + 1) * WATER_H / n);
+    g.fillStyle = pal.water[i + 1];
+    for (let x = 0; x < W; x += 2) g.fillRect(x, yb - 1, 1, 1);
+    g.fillStyle = pal.water[i];
+    for (let x = 1; x < W; x += 2) g.fillRect(x, yb, 1, 1);
+  }
+
+  g.fillStyle = pal.zoneLine;
+  for (let x = 0; x < W; x += 6) {
+    g.fillRect(x, Math.round(ZONE_Y1), 3, 1);
+    g.fillRect(x, Math.round(ZONE_Y2), 3, 1);
+  }
+  drawText(g, t('zone_shallow'), W - 3, SURFACE_Y + 4, 1, pal.label, 'right', false);
+  drawText(g, t('zone_mid'), W - 3, Math.round(ZONE_Y1) + 3, 1, pal.label, 'right', false);
+  drawText(g, t('zone_deep'), W - 3, Math.round(ZONE_Y2) + 3, 1, pal.label, 'right', false);
+
+  g.fillStyle = pal.label;
+  for (let m = 10; m < CONFIG.MAX_DEPTH_METERS; m += 10) {
+    const y = Math.round(depthToY(m / CONFIG.MAX_DEPTH_METERS));
+    g.fillRect(0, y, m % 50 === 0 ? 4 : 2, 1);
+  }
+
+  for (let x = 0; x < W; x++) {
+    const h = seabedHeight(x);
+    g.fillStyle = pal.sand;
+    g.fillRect(x, H - h, 1, h);
+    g.fillStyle = pal.sandTop;
+    g.fillRect(x, H - h, 1, 1);
+  }
+  g.fillStyle = pal.rock;
+  for (let i = 0; i < 7; i++) {
+    const x = randInt(6, W - 12);
+    const w = randInt(4, 9);
+    const h = randInt(2, 4);
+    g.fillRect(x, H - seabedHeight(x) - h + 1, w, h);
+    g.fillRect(x + 1, H - seabedHeight(x) - h, w - 2, 1);
+  }
+
+  world.weeds = [];
+  for (let i = 0; i < 14; i++) {
+    const x = randInt(4, W - 6);
+    world.weeds.push({ x, base: H - seabedHeight(x), h: randInt(8, 26), phase: rand(0, 6) });
+  }
+}
+
+
+/* ==========================================================================
+   12. HALAK: SPAWN, MOZGÁS, KAPÁS
+   ========================================================================== */
+function speedFactor() {
+  return game.event && game.event.type === 'calm' ? CONFIG.CALM_SPEED_FACTOR : 1;
+}
+
+function maxFish() {
+  let base = game.mode === 'night' ? CONFIG.MAX_FISH_NIGHT : CONFIG.MAX_FISH_DAY;
+  if (game.numPlayers === 2 && game.state !== 'start') base += 3;   // két horog, több hal
+  if (game.event && game.event.type === 'frenzy') base += CONFIG.FRENZY_EXTRA_FISH;
+  return base;
+}
+
+function pickSpecies() {
+  if (game.event && game.event.type === 'frenzy' && Math.random() < 0.8) return 'minnow';
+  const night = game.mode === 'night';
+  const entries = [];
+  for (const [key, sp] of Object.entries(SPECIES)) {
+    if (sp.minLevel > game.level) continue;
+    let w = night ? sp.spawnNight : sp.spawnDay;
+    if (sp.rare) w *= CONFIG.RARE_CHANCE_MULTIPLIER;
+    if (w > 0) entries.push([key, w]);
+  }
+  return pickWeighted(entries);
+}
+
+function spawnFish(onScreen = false, forcedKey = null) {
+  const key = forcedKey || pickSpecies();
+  const sp = SPECIES[key];
+  const spr = SPRITES[key];
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const y = depthToY(rand(sp.depth[0], sp.depth[1]));
+  const x = onScreen ? rand(20, W - 20) : (dir > 0 ? -spr.width / 2 - 2 : W + spr.width / 2 + 2);
+  const stamina = sp.stamina * CONFIG.STAMINA_MULTIPLIER * game.diff.stamina;
+  const m = sp.motion;
+
+  const f = {
+    key, sp,
+    w: spr.width, h: spr.height,
+    x, y, baseY: y, targetY: y, dir,
+    speed: sp.speed * rand(0.8, 1.2),
+    t: rand(0, 10), phase: rand(0, Math.PI * 2),
+    burst: 0,
+    burstTimer: m.burstEvery ? rand(m.burstEvery[0], m.burstEvery[1]) : 0,
+    turnTimer: m.turnEvery ? rand(m.turnEvery[0], m.turnEvery[1]) : 0,
+    targetTimer: rand(m.wander[0], m.wander[1]),
+    biteTimer: 0, cooldown: 0, fleeTimer: 0,
+    hooked: false, dead: false,
+    stamina, maxStamina: stamina,
+    struggle: false, phaseTimer: 0,
+    weight: Number(rand(sp.weight[0], sp.weight[1]).toFixed(2))
+  };
+  game.fish.push(f);
+  return f;
+}
+
+function populate() {
+  game.fish = [];
+  game.oldOneActive = false;
+  const n = Math.round(maxFish() * 0.7);
+  for (let i = 0; i < n; i++) spawnFish(true);
+}
+
+function spawnOldOne() {
+  spawnFish(false, 'oldone');
+  game.oldOneActive = true;
+  game.shake = 1.4;
+  addBanner(t('ban_old'), 3.5, '#d8ff9a', true);
+  Sound.rumble();
+}
+
+function updateSpawning(dt) {
+  game.spawnTimer -= dt;
+  if (game.spawnTimer > 0) return;
+  const frenzy = game.event && game.event.type === 'frenzy';
+  game.spawnTimer = frenzy ? 0.2 : CONFIG.SPAWN_INTERVAL;
+
+  const count = game.fish.filter((f) => f.key !== 'oldone').length;
+  if (count < maxFish()) spawnFish(false);
+
+  if (game.state === 'playing' && !game.oldOneActive) {
+    const chance = CONFIG.OLD_ONE_SPAWN_CHANCE * CONFIG.RARE_CHANCE_MULTIPLIER *
+      (game.mode === 'night' ? CONFIG.OLD_ONE_NIGHT_FACTOR : 1);
+    if (Math.random() < chance) spawnOldOne();
+  }
+}
+
+function mouthPos(f) {
+  return { x: f.x + f.dir * (f.w / 2 - 1), y: f.y + (f.sp.mouthOffset || 0) };
+}
+
+function isNearHook(f, hk) {
+  if (hk.state !== 'free') return false;
+  const m = mouthPos(f);
+  const tol = 5 + f.h * 0.25;
+  return Math.abs(m.x - (hk.x - 1)) < tol && Math.abs(m.y - (hk.y + 3)) < tol;
+}
+
+function updateFish(f, dt) {
+  f.t += dt;
+  if (f.hooked) return;
+
+  const sp = f.sp;
+  const m = sp.motion;
+  const minY = depthToY(sp.depth[0]);
+  const maxY = depthToY(sp.depth[1]);
+  if (f.cooldown > 0) f.cooldown -= dt;
+
+  let burstMul = 1;
+  if (m.burstMul) {
+    f.burstTimer -= dt;
+    if (f.burstTimer <= 0) {
+      f.burst = m.burstLen || 0.35;
+      f.burstTimer = rand(m.burstEvery[0], m.burstEvery[1]);
+    }
+    if (f.burst > 0) {
+      f.burst -= dt;
+      burstMul = m.burstMul;
+    }
+  }
+  if (f.fleeTimer > 0) {
+    f.fleeTimer -= dt;
+    burstMul = Math.max(burstMul, 2.5);
+  }
+
+  f.targetTimer -= dt;
+  if (f.targetTimer <= 0) {
+    f.targetTimer = rand(m.wander[0], m.wander[1]);
+    f.targetY = rand(minY, maxY);
+  }
+
+  // Érdeklődés a legközelebbi, előtte lévő szabad horog iránt
+  const playing = game.state === 'playing';
+  if (playing && f.cooldown <= 0 && f.fleeTimer <= 0) {
+    for (const p of game.players) {
+      const hk = p.hook;
+      if (hk.state !== 'free') continue;
+      const dx = hk.x - f.x;
+      if (Math.sign(dx) === f.dir && Math.abs(dx) < 50 && Math.abs(hk.y - f.y) < 28) {
+        f.targetY = clamp(hk.y + 3, minY, maxY);
+        break;
+      }
+    }
+  }
+  f.baseY += clamp(f.targetY - f.baseY, -m.drift * dt, m.drift * dt);
+
+  if (m.turnEvery) {
+    f.turnTimer -= dt;
+    if (f.turnTimer <= 0) {
+      f.turnTimer = rand(m.turnEvery[0], m.turnEvery[1]);
+      if (Math.random() < m.turnChance) f.dir *= -1;
+    }
+  }
+
+  // Melyik horog mellett szaglászik?
+  let nearPlayer = null;
+  if (playing) {
+    for (const p of game.players) {
+      if (isNearHook(f, p.hook)) { nearPlayer = p; break; }
+    }
+  }
+  const nibble = nearPlayer && f.cooldown <= 0 ? 0.35 : 1;
+  const speed = f.speed * CONFIG.FISH_SPEED_MULTIPLIER * game.diff.speed * speedFactor() * burstMul * nibble;
+  f.x += f.dir * speed * dt;
+  f.y = f.baseY + Math.sin(f.t * m.freq + f.phase) * m.amp;
+
+  if (nearPlayer && f.cooldown <= 0 && f.fleeTimer <= 0) {
+    f.biteTimer -= dt;
+    if (f.biteTimer <= 0) {
+      f.biteTimer = CONFIG.BITE_CHECK_INTERVAL;
+      if (Math.random() < sp.bite * CONFIG.BITE_CHANCE_MULTIPLIER * game.diff.bite) {
+        hookFish(f, nearPlayer);
+        return;
+      }
+      f.cooldown = CONFIG.BITE_COOLDOWN;
+      effects.bubbles.push(makeBubble(nearPlayer.hook.x, nearPlayer.hook.y + 2));
+    }
+  } else {
+    f.biteTimer = 0;
+  }
+
+  const margin = f.w / 2 + 14;
+  if (f.x < -margin || f.x > W + margin) f.dead = true;
+}
+
+function cleanupFish() {
+  game.fish = game.fish.filter((f) => {
+    if (f.dead) {
+      if (f.key === 'oldone') game.oldOneActive = false;
+      return false;
+    }
+    return true;
+  });
+}
+
+
+/* ==========================================================================
+   13. HOROG, FÁRASZTÁS, TEKERÉS, KIFOGÁS
+   ========================================================================== */
+function updateHook(p, dt) {
+  const hk = p.hook;
+  const inp = p.in;
+  p.sinceAction += dt;
+
+  // Gombnyomkodás: minden REEL nyomás lendületet ad, ami magától lecseng
+  if (inp.reel) {
+    p.reelVel = Math.min(CONFIG.MASH_MAX, p.reelVel + CONFIG.MASH_IMPULSE);
+    Sound.mash();
+  }
+  p.reelVel *= Math.exp(-CONFIG.MASH_DECAY * dt);
+  if (p.reelVel < 0.5) p.reelVel = 0;
+
+  if (hk.state === 'free') {
+    if (inp.left) hk.x -= CONFIG.HOOK_SPEED_X * dt;
+    if (inp.right) hk.x += CONFIG.HOOK_SPEED_X * dt;
+    if (inp.down) hk.y += CONFIG.HOOK_SPEED_DOWN * dt;
+    if (inp.up) hk.y -= CONFIG.HOOK_SPEED_UP * dt;
+    hk.y -= p.reelVel * dt;
+    hk.x = clamp(hk.x, 6, W - 6);
+    hk.y = clamp(hk.y, HOOK_MIN_Y, HOOK_MAX_Y);
+    hk.tension = Math.max(0, hk.tension - CONFIG.TENSION_DECAY * 3 * dt);
+  } else if (hk.state === 'fight') {
+    updateFight(p, dt);
+  } else {
+    idleHook(p, dt);
+  }
+}
+
+// Menükben / szakadás után a horog visszatekeredik
+function idleHook(p, dt) {
+  const hk = p.hook;
+  p.reelVel *= Math.exp(-CONFIG.MASH_DECAY * dt);
+  if (hk.state === 'reset') {
+    hk.y -= CONFIG.RESET_SPEED * dt;
+    if (hk.y <= HOOK_MIN_Y) {
+      hk.y = HOOK_MIN_Y;
+      hk.state = 'free';
+    }
+  }
+}
+
+function attachFishToHook(f, hk) {
+  f.x = hk.x - 1 - f.dir * (f.w / 2 - 1);
+  f.y = hk.y + 3 - (f.sp.mouthOffset || 0);
+}
+
+function hookFish(f, p) {
+  const hk = p.hook;
+  f.hooked = true;
+  f.owner = p;
+  f.stamina = f.maxStamina;
+  f.struggle = true;
+  f.phaseTimer = rand(0.8, 1.3);
+  hk.state = 'fight';
+  hk.fish = f;
+  hk.tension = 0;
+  hk.overload = 0;
+  p.sinceAction = 99;
+  attachFishToHook(f, hk);
+  for (let i = 0; i < 6; i++) effects.bubbles.push(makeBubble(hk.x + rand(-3, 3), hk.y + rand(0, 4)));
+  addPopup('!', hk.x, hk.y - 8, p.style.tag, 2, 0.6);
+  Sound.bite();
+}
+
+function updateFight(p, dt) {
+  const hk = p.hook;
+  const inp = p.in;
+  const f = hk.fish;
+  const sp = f.sp;
+  const calm = speedFactor();
+  const holding = inp.up;
+  const sizeFactor = 1 / (1 + sp.pull / CONFIG.SIZE_PULL_DIVIDER);
+
+  if (f.stamina > 0) {
+    // Vergődés / pihenés váltakozik – ez adja az időzítést
+    f.phaseTimer -= dt;
+    if (f.phaseTimer <= 0) {
+      f.struggle = !f.struggle;
+      if (f.struggle) {
+        f.phaseTimer = rand(0.7, 1.5) * (0.7 + sp.aggression * 0.4);
+        f.dir = Math.random() < 0.5 ? -1 : 1;
+        Sound.struggle();
+      } else {
+        f.phaseTimer = rand(0.6, 1.4) / (0.6 + sp.aggression * 0.4);
+      }
+    }
+
+    const ratio = f.stamina / f.maxStamina;
+    const pull = sp.pull * (f.struggle ? CONFIG.STRUGGLE_PULL : CONFIG.REST_PULL) * (0.4 + 0.6 * ratio) * calm;
+    hk.y += pull * dt;
+    if (f.struggle) {
+      hk.x += f.dir * sp.pull * 0.9 * calm * dt;
+      hk.tension += CONFIG.STRUGGLE_TENSION * sp.aggression * dt;
+      if (Math.random() < dt * 10) effects.bubbles.push(makeBubble(f.x, f.y));
+    }
+
+    // Felfelé nyíl nyomva tartva: lassú, egyenletes tekerés
+    if (holding) {
+      hk.y -= CONFIG.REEL_SPEED_FIGHT * dt;
+      hk.tension += (f.struggle ? CONFIG.REEL_TENSION_STRUGGLE : CONFIG.REEL_TENSION_REST) * dt;
+      f.stamina -= CONFIG.REEL_DRAIN * dt;
+      p.sinceAction = 0;
+    }
+    // REEL gombnyomkodás: gyorsabb, de vergődés közben feszíti a damilt
+    if (inp.reel) {
+      hk.tension += f.struggle ? CONFIG.MASH_TENSION_STRUGGLE : CONFIG.MASH_TENSION_REST;
+      f.stamina -= CONFIG.MASH_DRAIN;
+      p.sinceAction = 0;
+    }
+    hk.y -= p.reelVel * CONFIG.MASH_FIGHT_FACTOR * sizeFactor * dt;
+  } else {
+    // Kifáradt hal: tekerés és nyomkodás is könnyen húzza
+    f.stamina = 0;
+    f.struggle = false;
+    if (holding) hk.y -= CONFIG.REEL_SPEED_TIRED * sizeFactor * dt;
+    hk.y -= p.reelVel * sizeFactor * dt;
+    if (holding || inp.reel) p.sinceAction = 0;
+  }
+
+  if (inp.down) {
+    hk.y += CONFIG.GIVE_LINE_SPEED * dt;
+    hk.tension -= CONFIG.GIVE_LINE_RELIEF * dt;
+  }
+  if (inp.left) hk.x -= CONFIG.HOOKED_MOVE_X * dt;
+  if (inp.right) hk.x += CONFIG.HOOKED_MOVE_X * dt;
+
+  // TUG: erős rántás
+  if (inp.tug) {
+    if (f.stamina > 0) {
+      f.stamina -= CONFIG.TUG_DAMAGE * (f.struggle ? 1 : CONFIG.TUG_REST_BONUS);
+      let tug = f.struggle ? CONFIG.TUG_TENSION_STRUGGLE : CONFIG.TUG_TENSION_REST;
+      if (p.sinceAction < CONFIG.TUG_SPAM_WINDOW) tug += CONFIG.TUG_SPAM_PENALTY;
+      hk.tension += tug;
+      hk.y -= 4;
+      if (f.stamina <= 0) {
+        f.stamina = 0;
+        addPopup(t('pop_tired'), hk.x, hk.y - 10, '#5fd0ff', 1, 1);
+      }
+    } else {
+      hk.y -= 6;
+      hk.tension += 3;
+    }
+    p.sinceAction = 0;
+    effects.bubbles.push(makeBubble(hk.x, hk.y));
+    Sound.tug();
+  }
+
+  hk.tension = clamp(hk.tension - CONFIG.TENSION_DECAY * game.diff.decay * dt, 0, CONFIG.TENSION_MAX);
+  if (f.stamina > 0 && p.sinceAction > CONFIG.REGEN_DELAY && p.reelVel < 5 && f.stamina < f.maxStamina) {
+    f.stamina = Math.min(f.maxStamina, f.stamina + sp.regen * dt);
+  }
+
+  hk.x = clamp(hk.x, 6, W - 6);
+  hk.y = clamp(hk.y, SURFACE_Y, HOOK_MAX_Y);
+  if (hk.x <= 8) f.dir = 1;
+  else if (hk.x >= W - 8) f.dir = -1;
+  attachFishToHook(f, hk);
+
+  // Túlterhelés: a damil csak akkor szakad el, ha túl sokáig marad a piros zónában
+  if (hk.tension >= CONFIG.SNAP_ZONE) {
+    if (hk.overload === 0) Sound.warn();
+    hk.overload += dt;
+    if (hk.overload >= CONFIG.SNAP_GRACE) {
+      hk.overload = 0;
+      snapLine(p);
+      return;
+    }
+  } else {
+    hk.overload = Math.max(0, hk.overload - dt * 2);
+  }
+  if (hk.y <= SURFACE_Y + 1) catchFish(p);
+}
+
+function catchFish(p) {
+  const hk = p.hook;
+  const f = hk.fish;
+  const mult = (game.mode === 'night' ? CONFIG.NIGHT_SCORE_MULTIPLIER : 1) * CONFIG.POINTS_MULTIPLIER;
+  const pts = Math.round(f.sp.points * mult);
+  const nick = makeNickname(f);
+  const species = fishName(f.key);
+
+  p.score += pts;
+  p.roundScore += pts;
+  p.caught++;
+
+  // Bónuszidő a fogás nehézsége szerint
+  const bonusSec = Math.max(1, Math.round(f.sp.timeBonus * CONFIG.CATCH_TIME_MULTIPLIER * game.diff.time));
+  game.timeLeft = Math.min(CONFIG.TIME_MAX, game.timeLeft + bonusSec);
+  game.timeFlash = 0.8;
+  addPopup(t('pop_time', { n: bonusSec }), hk.x, SURFACE_Y - 30, '#6cf06c', 1, 1.8);
+  p.log.push({ nick, species, weight: f.weight, pts, round: game.level });
+  if (!p.biggest || f.weight > p.biggest.weight) p.biggest = { nick, name: species, weight: f.weight };
+  if (!p.rarest || f.sp.rarity > p.rarest.rarity) p.rarest = { nick, name: species, rarity: f.sp.rarity };
+
+  const rare = !!f.sp.rare;
+  const label = f.key === 'oldone' ? t('pop_legend') : nick;
+  addPopup(label, hk.x, SURFACE_Y - 22, p.style.tag, 1, 1.8);
+  addPopup(`${species} +${pts}`, hk.x, SURFACE_Y - 15, rare ? '#ffc933' : '#ffffff', 2, 1.8);
+  splash(hk.x, SURFACE_Y, rare ? 22 : 12, PALETTES[game.mode].foam);
+  if (f.key === 'oldone') {
+    addBanner(t('ban_legend'), 2.5, '#d8ff9a', true);
+    game.shake = 0.6;
+  } else if (rare) {
+    addBanner(t('ban_rare'), 1.8, '#ffc933', true);
+  }
+  Sound.catchFish(rare);
+
+  f.dead = true;
+  f.hooked = false;
+  hk.fish = null;
+  hk.state = 'free';
+  hk.tension = 0;
+  hk.y = HOOK_MIN_Y;
+
+  if (game.state === 'playing' && p.roundScore >= game.target) roundClear(p);
+}
+
+function snapLine(p) {
+  const hk = p.hook;
+  releaseFish(p);
+  hk.state = 'reset';
+  addBanner(game.numPlayers === 2 ? t('ban_snap_p', { p: pLabel(p.index) }) : t('ban_snap'), 1.4, '#ff4a4a', true);
+  for (let i = 0; i < 8; i++) {
+    addParticle(hk.x, hk.y, rand(-40, 40), rand(-40, 20), rand(0.3, 0.6), '#d4d6de', 60);
+  }
+  Sound.snap();
+}
+
+// A hal lekerül a horogról és elmenekül
+function releaseFish(p) {
+  const hk = p.hook;
+  const f = hk.fish;
+  if (f) {
+    f.hooked = false;
+    f.owner = null;
+    f.struggle = false;
+    f.fleeTimer = 2.5;
+    f.cooldown = 4;
+    f.stamina = f.maxStamina;
+    f.baseY = f.y;
+    f.targetY = f.y;
+  }
+  hk.fish = null;
+  hk.tension = 0;
+}
+
+
+/* ==========================================================================
+   14. RAGADOZÓ (CÁPA)
+   Bármikor megjelenhet, őrjáratozik, néha elúszik és később visszajön.
+   Ha valakinek hal van a horgán, levadássza – kivéve a sekély vízben!
+   ========================================================================== */
+function resetPredatorTimer(first) {
+  const min = first ? CONFIG.PREDATOR_FIRST_MIN : CONFIG.PREDATOR_RETURN_MIN;
+  const max = first ? CONFIG.PREDATOR_FIRST_MAX : CONFIG.PREDATOR_RETURN_MAX;
+  game.predatorTimer = rand(min, max) / game.diff.predator;
+}
+
+function spawnPredator() {
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const spr = SPRITES.shark;
+  game.predator = {
+    x: dir > 0 ? -spr.width : W + spr.width,
+    y: depthToY(rand(0.45, 0.85)),
+    targetY: depthToY(rand(0.45, 0.85)),
+    dir,
+    w: spr.width,
+    h: spr.height,
+    state: 'enter',        // 'enter' | 'patrol' | 'hunt' | 'leave'
+    timer: rand(CONFIG.PREDATOR_PATROL_MIN, CONFIG.PREDATOR_PATROL_MAX),
+    huntTimer: 0,
+    wanderTimer: 2,
+    heart: 0,
+    t: 0
+  };
+  addBanner(t('ban_shark'), 2.2, '#ff4a4a', true);
+  Sound.predatorAlarm();
+}
+
+// Vadászható hal: horgon van, nem a vén óriás, és nincs a sekély zónában
+function findPrey(pr) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const p of game.players) {
+    const f = p.hook.fish;
+    if (!f || f.key === 'oldone' || f.y < ZONE_Y1 - 2) continue;
+    const d = Math.hypot(f.x - pr.x, f.y - pr.y);
+    if (d < bestDist) { best = f; bestDist = d; }
+  }
+  return best;
+}
+
+function predatorLeave(pr) {
+  pr.state = 'leave';
+  pr.dir = pr.x < W / 2 ? -1 : 1;
+}
+
+function updatePredator(dt) {
+  if (!CONFIG.PREDATOR_ENABLED) return;
+  const pr = game.predator;
+  if (!pr) {
+    if (game.state === 'playing' && game.level >= CONFIG.PREDATOR_START_LEVEL) {
+      game.predatorTimer -= dt;
+      if (game.predatorTimer <= 0) spawnPredator();
+    }
+    return;
+  }
+
+  pr.t += dt;
+  const scale = game.diff.predator;
+  const patrol = CONFIG.PREDATOR_SPEED * scale * speedFactor();
+  const hunt = Math.min(CONFIG.PREDATOR_HUNT_MAX, CONFIG.PREDATOR_HUNT_SPEED * scale) * speedFactor();
+  const minY = ZONE_Y1 + 8;
+  const maxY = HOOK_MAX_Y - 4;
+
+  // A THE OLD ONE-tól a cápa is fél
+  const oldOneHooked = game.players.some((p) => p.hook.fish && p.hook.fish.key === 'oldone');
+  if (oldOneHooked && pr.state !== 'leave') predatorLeave(pr);
+
+  const prey = pr.state === 'leave' || game.state !== 'playing' ? null : findPrey(pr);
+  if (prey && pr.state !== 'hunt') {
+    pr.state = 'hunt';
+    pr.huntTimer = 0;
+    addPopup('!!', pr.x, pr.y - 12, '#ff4a4a', 2, 0.8);
+    Sound.predatorSting();
+  } else if (!prey && pr.state === 'hunt') {
+    pr.state = 'patrol';
+    pr.timer = rand(3, 6);
+  }
+
+  // Függőleges kóborlás
+  pr.wanderTimer -= dt;
+  if (pr.wanderTimer <= 0) {
+    pr.wanderTimer = rand(2, 4);
+    pr.targetY = rand(minY, maxY);
+  }
+
+  switch (pr.state) {
+    case 'enter':
+      pr.x += pr.dir * patrol * 1.3 * dt;
+      pr.y += clamp(pr.targetY - pr.y, -10 * dt, 10 * dt);
+      if (pr.x > 24 && pr.x < W - 24) pr.state = 'patrol';
+      break;
+
+    case 'patrol':
+      pr.timer -= dt;
+      pr.x += pr.dir * patrol * dt;
+      pr.y += clamp(pr.targetY - pr.y, -10 * dt, 10 * dt);
+      if ((pr.x < 20 && pr.dir < 0) || (pr.x > W - 20 && pr.dir > 0)) pr.dir *= -1;
+      if (pr.timer <= 0) {
+        if (Math.random() < 0.35) pr.timer = rand(3, 6);   // marad még egy kicsit
+        else predatorLeave(pr);                            // elúszik (később visszajöhet)
+      }
+      break;
+
+    case 'hunt': {
+      pr.huntTimer += dt;
+      const dx = prey.x - pr.x;
+      const dy = prey.y - pr.y;
+      const dist = Math.max(1, Math.hypot(dx, dy));
+      if (Math.abs(dx) > 4) pr.dir = dx > 0 ? 1 : -1;
+      pr.x += (dx / dist) * hunt * dt;
+      pr.y += (dy / dist) * hunt * 0.8 * dt;
+      const mouthX = pr.x + pr.dir * (pr.w / 2 - 3);
+      const mouthY = pr.y + 2;
+      if (Math.abs(mouthX - prey.x) < 6 + prey.w * 0.25 && Math.abs(mouthY - prey.y) < 5 + prey.h * 0.4) {
+        eatHookedFish(prey);
+        predatorLeave(pr);
+      } else if (pr.huntTimer > CONFIG.PREDATOR_GIVEUP) {
+        predatorLeave(pr);
+      }
+      break;
+    }
+
+    case 'leave':
+      pr.x += pr.dir * patrol * 1.7 * dt;
+      if (pr.x < -pr.w - 4 || pr.x > W + pr.w + 4) {
+        game.predator = null;
+        resetPredatorTimer(false);
+        return;
+      }
+      break;
+  }
+
+  if (pr.state !== 'enter' && pr.state !== 'leave') pr.y = clamp(pr.y, minY, maxY);
+
+  // A többi hal menekül a cápa elől
+  for (const f of game.fish) {
+    if (f.hooked || f.key === 'oldone') continue;
+    if (Math.abs(f.x - pr.x) < 30 && Math.abs(f.y - pr.y) < 18 && f.fleeTimer <= 0) {
+      f.fleeTimer = 1.2;
+      f.dir = f.x < pr.x ? -1 : 1;
+    }
+  }
+
+  // Szívverés-hang, vadászatnál gyorsabban
+  if (pr.state !== 'leave' && game.state === 'playing') {
+    pr.heart -= dt;
+    if (pr.heart <= 0) {
+      pr.heart = pr.state === 'hunt' ? 0.4 : 0.9;
+      Sound.heartbeat();
+    }
+  }
+}
+
+function eatHookedFish(f) {
+  const p = f.owner;
+  if (!p) return;
+  const hk = p.hook;
+  f.dead = true;
+  f.hooked = false;
+  hk.fish = null;
+  hk.state = 'reset';
+  hk.tension = 0;
+  p.eaten++;
+  addPopup(t('pop_eaten'), f.x, f.y - 10, '#ff4a4a', 2, 1.2);
+  for (let i = 0; i < 14; i++) {
+    addParticle(f.x, f.y, rand(-30, 30), rand(-30, 30), rand(0.3, 0.8), choice(['#c02030', '#ff4a4a', '#ffffff']), 0);
+  }
+  game.shake = 0.4;
+  Sound.chomp();
+}
+
+
+/* ==========================================================================
+   15. RANDOM ESEMÉNYEK
+   ========================================================================== */
+function updateEvents(dt) {
+  if (game.event) {
+    game.event.time -= dt;
+    if (game.event.time <= 0) {
+      game.event = null;
+      game.eventCooldown = CONFIG.EVENT_COOLDOWN;
+    }
+    return;
+  }
+  game.eventCooldown -= dt;
+  if (game.eventCooldown > 0) return;
+  game.eventTimer += dt;
+  if (game.eventTimer >= CONFIG.EVENT_CHECK_INTERVAL) {
+    game.eventTimer = 0;
+    if (Math.random() < CONFIG.EVENT_CHANCE) {
+      const options = ['frenzy', 'calm'];
+      if (!game.oldOneActive) options.push('shadow');
+      startEvent(choice(options));
+    }
+  }
+}
+
+function startEvent(type) {
+  if (type === 'frenzy') {
+    game.event = { type, time: CONFIG.FRENZY_DURATION };
+    addBanner(t('ban_frenzy'), 2, '#ffc933', true);
+    for (let i = 0; i < 6; i++) spawnFish(false, 'minnow');
+    Sound.event();
+  } else if (type === 'calm') {
+    game.event = { type, time: CONFIG.CALM_DURATION };
+    addBanner(t('ban_calm'), 2, '#9fe8ff', false);
+    Sound.event();
+  } else if (type === 'shadow') {
+    game.event = { type, time: 3 };
+    spawnOldOne();
+  }
+}
+
+
+/* ==========================================================================
+   16. EFFEKTEK
+   ========================================================================== */
+function addParticle(x, y, vx, vy, life, color, gravity = 0) {
+  effects.particles.push({ x, y, vx, vy, life, color, gravity });
+}
+
+function splash(x, y, n, color) {
+  for (let i = 0; i < n; i++) {
+    addParticle(x + rand(-3, 3), y, rand(-35, 35), rand(-80, -30), rand(0.4, 0.9), color, 170);
+  }
+}
+
+function makeBubble(x, y) {
+  return { x, y, vy: rand(12, 24), phase: rand(0, 6), size: Math.random() < 0.2 ? 2 : 1 };
+}
+
+function addPopup(text, x, y, color, scale = 1, life = 1.4) {
+  effects.popups.push({ text, x, y, color, scale, life });
+}
+
+function addBanner(text, life, color, flash) {
+  effects.banners.push({ text, life, color, flash });
+  if (effects.banners.length > 4) effects.banners.shift();
+}
+
+function updateEffects(dt) {
+  for (const p of effects.particles) {
+    p.life -= dt;
+    p.vy += p.gravity * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
+  effects.particles = effects.particles.filter(
+    (p) => p.life > 0 && !(p.gravity > 100 && p.vy > 0 && p.y > SURFACE_Y + 1)
+  );
+
+  if (Math.random() < dt * 2.5) {
+    const x = randInt(4, W - 4);
+    effects.bubbles.push(makeBubble(x, H - seabedHeight(x) - 1));
+  }
+  for (const b of effects.bubbles) {
+    b.y -= b.vy * dt;
+    b.x += Math.sin(game.time * 3 + b.phase) * 4 * dt;
+  }
+  effects.bubbles = effects.bubbles.filter((b) => b.y > SURFACE_Y + 1);
+
+  for (const p of effects.popups) {
+    p.life -= dt;
+    p.y -= 10 * dt;
+  }
+  effects.popups = effects.popups.filter((p) => p.life > 0);
+
+  if (effects.banners.length) {
+    effects.banners[0].life -= dt;
+    if (effects.banners[0].life <= 0) effects.banners.shift();
+  }
+}
+
+function updateBoat(p, dt) {
+  const diff = p.hook.x - p.boat.x;
+  const maxStep = 45 * dt;
+  p.boat.x += clamp(diff * 2.5 * dt, -maxStep, maxStep);
+  p.boat.x = clamp(p.boat.x, 16, W - 16);
+}
+
+
+/* ==========================================================================
+   17. RAJZOLÁS
+   ========================================================================== */
+function drawSkyDynamic() {
+  ctx.fillStyle = '#ffffff';
+  if (game.mode === 'day') {
+    for (const c of world.clouds) {
+      const x = Math.round(((c.x + game.time * c.speed) % (W + 40)) - 20);
+      ctx.fillRect(x, c.y, c.w, 3);
+      ctx.fillRect(x + 3, c.y - 2, c.w - 8, 2);
+    }
+  } else {
+    for (const s of world.stars) {
+      if (Math.floor(game.time * 2 + s.phase) % 3 === 0) ctx.fillRect(s.x, s.y, 1, 1);
+    }
+  }
+}
+
+function drawLightRays() {
+  ctx.save();
+  ctx.globalAlpha = 0.07;
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 4; i++) {
+    const x0 = 30 + i * 80 + Math.sin(game.time * 0.4 + i) * 14;
+    ctx.beginPath();
+    ctx.moveTo(x0, SURFACE_Y);
+    ctx.lineTo(x0 + 14, SURFACE_Y);
+    ctx.lineTo(x0 + 46, ZONE_Y2);
+    ctx.lineTo(x0 + 26, ZONE_Y2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawWeeds() {
+  const [c1, c2] = PALETTES[game.mode].weed;
+  for (const w of world.weeds) {
+    for (let i = 0; i < w.h; i++) {
+      const sx = w.x + Math.round(Math.sin(game.time * 1.6 + w.phase + i * 0.25) * (i / w.h) * 3);
+      ctx.fillStyle = i % 3 === 0 ? c2 : c1;
+      ctx.fillRect(sx, w.base - i, 2, 1);
+    }
+  }
+}
+
+function drawBubbles() {
+  ctx.fillStyle = game.mode === 'day' ? 'rgba(220,245,255,0.75)' : 'rgba(150,190,240,0.6)';
+  for (const b of effects.bubbles) ctx.fillRect(Math.round(b.x), Math.round(b.y), b.size, b.size);
+}
+
+function lurePos(f) {
+  const lx = f.dir > 0 ? f.sp.lure.x : f.w - 1 - f.sp.lure.x;
+  return { x: Math.round(f.x - f.w / 2) + lx, y: Math.round(f.y - f.h / 2) + f.sp.lure.y };
+}
+
+function eyePos(f) {
+  const ex = f.dir > 0 ? f.sp.eye.x : f.w - 1 - f.sp.eye.x;
+  return { x: Math.round(f.x - f.w / 2) + ex, y: Math.round(f.y - f.h / 2) + f.sp.eye.y };
+}
+
+function drawFish(f) {
+  const img = SPRITES[f.key];
+  let x = f.x - f.w / 2;
+  const y = f.y - f.h / 2;
+  const exhausted = f.hooked && f.stamina <= 0;
+  if (f.hooked && f.struggle) x += Math.round(rand(-1, 1));
+
+  drawSprite(ctx, img, x, y, f.dir < 0, exhausted, f.sp.wiggle || 0, f.t);
+
+  if (f.sp.sparkle && Math.random() < 0.2) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(Math.round(x + rand(0, f.w)), Math.round(y + rand(-2, f.h + 2)), 1, 1);
+  }
+  if (f.sp.lure && !exhausted) {
+    const p = lurePos(f);
+    ctx.fillStyle = Math.sin(game.time * 6 + f.phase) > 0 ? '#e0ffff' : '#6fd8ff';
+    ctx.fillRect(p.x, p.y, 1, 1);
+  }
+  if (f.hooked && f.struggle && Math.floor(game.time * 8) % 2 === 0) {
+    drawText(ctx, '!', f.x, y - 8, 1, '#ff5050', 'center');
+  }
+}
+
+function drawAllFish() {
+  for (const f of game.fish) if (!f.hooked) drawFish(f);
+  for (const p of game.players) if (p.hook.fish) drawFish(p.hook.fish);
+}
+
+function drawPredator() {
+  const pr = game.predator;
+  if (!pr) return;
+  const onScreen = pr.x > -pr.w / 2 && pr.x < W + pr.w / 2;
+  if (onScreen) {
+    const wobble = Math.round(Math.sin(pr.t * 4));
+    drawSprite(ctx, SPRITES.shark, pr.x - pr.w / 2, pr.y - pr.h / 2 + wobble, pr.dir < 0);
+  }
+  // Érkezés-jelző a képernyő szélén
+  if (pr.state === 'enter' && Math.floor(game.time * 6) % 2 === 0) {
+    const fromLeft = pr.dir > 0;
+    const label = fromLeft ? `> ${t('shark')}` : `${t('shark')} <`;
+    drawText(ctx, label, fromLeft ? 3 : W - 3, pr.y - 5, 2, '#ff4a4a', fromLeft ? 'left' : 'right');
+  }
+}
+
+function getRodGeometry(p) {
+  const hk = p.hook;
+  const bob = Math.round(Math.sin(game.time * 2.2 + p.index * 1.7));
+  const facing = hk.x >= p.boat.x ? 1 : -1;
+  const bx = Math.round(p.boat.x - 13);
+  const by = SURFACE_Y - 3 + bob;
+  const px = Math.round(p.boat.x - 4);
+  const py = by - 6;
+  const hand = { x: facing > 0 ? px + 5 : px + 2, y: py + 5 };
+  const bend = hk.state === 'fight' ? 5 : 0;
+  const tip = { x: hand.x + facing * 12, y: hand.y - 9 + bend };
+  return { facing, bx, by, px, py, hand, tip };
+}
+
+function drawLineAndHook(p, tip) {
+  const hk = p.hook;
+  const danger = hk.tension > 70 && Math.floor(game.time * 12) % 2 === 0;
+  const lineColor = danger ? '#ff4a4a' : p.style.line;
+  const hx = Math.round(hk.x);
+  const hy = Math.round(hk.y);
+  pixelLine(ctx, tip.x, tip.y, hx, hy, lineColor);
+  drawSprite(ctx, SPRITES.hook, hx - 2, hy);
+  if (hk.state === 'free') {
+    const wig = Math.floor(game.time * 5 + p.index) % 2;
+    ctx.fillStyle = '#ff6f9a';
+    ctx.fillRect(hx - 2, hy + 2 + wig, 1, 2);
+  }
+}
+
+function drawSurface() {
+  const pal = PALETTES[game.mode];
+  ctx.fillStyle = pal.surface;
+  for (let x = 0; x < W; x++) {
+    const off = Math.round(Math.sin(x * 0.18 + game.time * 3) * 0.8 + Math.sin(x * 0.05 - game.time * 1.3) * 0.6);
+    ctx.fillRect(x, SURFACE_Y + off, 1, 1);
+  }
+  ctx.fillStyle = pal.foam;
+  for (let i = 0; i < 8; i++) {
+    const raw = i * 47 + game.time * 12 * (i % 2 ? 1 : -1);
+    const x = Math.floor(((raw % W) + W) % W);
+    ctx.fillRect(x, SURFACE_Y - 1, 2, 1);
+  }
+}
+
+function drawBoat(p, r) {
+  drawSprite(ctx, p.style.person, r.px, r.py, r.facing < 0);
+  ctx.drawImage(p.style.boat, r.bx, r.by);
+  pixelLine(ctx, r.hand.x, r.hand.y, r.tip.x, r.tip.y, '#6b4220');
+  if (game.mode === 'night') {
+    const lx = r.facing > 0 ? r.bx + 2 : r.bx + 23;
+    ctx.fillStyle = '#555a66';
+    ctx.fillRect(lx, r.by - 4, 1, 4);
+    ctx.fillStyle = Math.sin(game.time * 9 + p.index) > -0.8 ? '#ffe27a' : '#c9a040';
+    ctx.fillRect(lx - 1, r.by - 6, 3, 2);
+  }
+  if (game.numPlayers === 2) {
+    drawText(ctx, `P${p.index + 1}`, r.px + 4, r.py - 8, 1, p.style.tag, 'center');
+  }
+}
+
+function cutGlow(g, x, y, r) {
+  g.fillStyle = 'rgba(0,0,0,0.3)';
+  for (const s of [1, 0.75, 0.5, 0.3]) {
+    g.beginPath();
+    g.arc(x, y, r * s, 0, Math.PI * 2);
+    g.fill();
+  }
+}
+
+function drawDarkness() {
+  const g = darkCtx;
+  g.globalCompositeOperation = 'source-over';
+  g.clearRect(0, 0, W, H);
+  const bands = 8;
+  for (let i = 0; i < bands; i++) {
+    const y0 = SURFACE_Y + Math.floor(i * WATER_H / bands);
+    const y1 = SURFACE_Y + Math.floor((i + 1) * WATER_H / bands);
+    g.fillStyle = `rgba(0,0,8,${0.15 + 0.62 * (i / (bands - 1))})`;
+    g.fillRect(0, y0, W, y1 - y0);
+  }
+  g.globalCompositeOperation = 'destination-out';
+  for (const p of game.players) {
+    cutGlow(g, p.hook.x, p.hook.y + 2, 30);
+    cutGlow(g, p.boat.x, SURFACE_Y + 2, 16);
+  }
+  for (const f of game.fish) {
+    if (f.sp.lure) { const lp = lurePos(f); cutGlow(g, lp.x, lp.y, 12); }
+    if (f.sp.glow) cutGlow(g, f.x, f.y, f.sp.glow);
+    if (f.sp.eye) { const ep = eyePos(f); cutGlow(g, ep.x, ep.y, 8); }
+  }
+  const pr = game.predator;
+  if (pr) {
+    const ex = pr.x + pr.dir * (pr.w / 2 - 5);
+    cutGlow(g, ex, pr.y - 2, 7);
+  }
+  g.globalCompositeOperation = 'source-over';
+  ctx.drawImage(darkCanvas, 0, 0);
+}
+
+function drawParticles() {
+  for (const p of effects.particles) {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+  }
+}
+
+function drawPopups() {
+  for (const p of effects.popups) {
+    if (p.life < 0.3 && Math.floor(p.life * 20) % 2 === 0) continue;
+    const half = textWidth(p.text, p.scale) / 2;
+    const x = clamp(p.x, half + 2, W - half - 2);
+    drawText(ctx, p.text, x, p.y, p.scale, p.color, 'center');
+  }
+}
+
+function drawBanner() {
+  const b = effects.banners[0];
+  if (!b) return;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 46, W, 18);
+  if (b.flash && Math.floor(b.life * 6) % 2 === 1) return;
+  drawText(ctx, b.text, W / 2, 50, 2, b.color, 'center');
+}
+
+function drawEventIndicator() {
+  if (game.state !== 'playing' || !game.event || game.event.type === 'shadow') return;
+  const label = game.event.type === 'frenzy' ? t('ev_frenzy') : t('ev_calm');
+  const color = game.event.type === 'frenzy' ? '#ffc933' : '#9fe8ff';
+  drawText(ctx, `${label} ${pad(Math.ceil(game.event.time), 2)}`, 4, 4, 1, color);
+}
+
+
+function render() {
+  ctx.save();
+  if (game.shake > 0) ctx.translate(Math.round(rand(-1.5, 1.5)), Math.round(rand(-1, 1)));
+
+  ctx.drawImage(bgCanvas, 0, 0);
+  drawSkyDynamic();
+  if (game.mode === 'day') drawLightRays();
+  drawWeeds();
+  drawBubbles();
+  drawAllFish();
+  drawPredator();
+
+  const rods = game.players.map((p) => getRodGeometry(p));
+  game.players.forEach((p, i) => drawLineAndHook(p, rods[i].tip));
+  drawSurface();
+  game.players.forEach((p, i) => drawBoat(p, rods[i]));
+
+  if (game.mode === 'night') drawDarkness();
+
+  drawParticles();
+  drawPopups();
+  drawBanner();
+  drawEventIndicator();
+  ctx.restore();
+
+}
+
+
+/* ==========================================================================
+   18. HUD FRISSÍTÉS
+   ========================================================================== */
+function updateHUD() {
+  const p1 = game.players[0];
+  const p2 = game.players[1];
+
+  setText(ui.p1Label, game.numPlayers === 2 ? pLabel(0) : t('hud_score'));
+  setText(ui.p1Score, pad(p1 ? p1.score : 0, 5));
+  if (p2) setText(ui.p2Score, pad(p2.score, 5));
+  setText(ui.round, pad(game.level, 2));
+  setText(ui.target, pad(game.target, 4));
+  const reached = game.players.some((p) => p.roundScore >= game.target);
+  ui.target.classList.toggle('reached', reached);
+
+  const secs = Math.ceil(game.timeLeft);
+  setText(ui.time, `${pad(Math.floor(secs / 60), 2)}:${pad(secs % 60, 2)}`);
+  ui.time.classList.toggle('low', game.state === 'playing' && secs <= 10 && game.timeFlash <= 0);
+  ui.time.classList.toggle('bonus', game.timeFlash > 0);
+
+  setText(ui.mode, t('mode_' + game.mode));
+  ui.mode.classList.toggle('night', game.mode === 'night');
+
+  game.players.forEach((p, i) => updatePanel(ui.panels[i], p));
+}
+
+function updatePanel(pn, p) {
+  const hk = p.hook;
+  const f = hk.fish;
+
+  setText(pn.depth, pad(Math.round(yToDepthFrac(hk.y) * CONFIG.MAX_DEPTH_METERS), 2));
+  setText(pn.fish, pad(p.caught, 2));
+  setText(pn.rpts, `${pad(p.roundScore, 4)}/${pad(game.target, 4)}`);
+
+  const hunted = f && game.predator && game.predator.state === 'hunt' && findPrey(game.predator) === f;
+
+  if (f) {
+    pn.root.classList.remove('idle');
+    setText(pn.fishName, fishName(f.key));
+    setWidth(pn.stFill, (f.stamina / f.maxStamina) * 100);
+    setText(pn.stVal, pad(Math.ceil(f.stamina), 3));
+    pn.stFill.classList.toggle('empty', f.stamina <= 0);
+    let status, cls;
+    if (hk.overload > 0) { status = t('st_break'); cls = 'status-danger'; }
+    else if (hunted) { status = t('st_shark'); cls = 'status-danger'; }
+    else if (f.stamina <= 0) { status = t('st_tired'); cls = 'status-tired'; }
+    else if (f.struggle) { status = t('st_struggle'); cls = 'status-struggle'; }
+    else { status = t('st_rest'); cls = 'status-rest'; }
+    setText(pn.status, status);
+    setClass(pn.status, 'fight-status ' + cls);
+  } else {
+    pn.root.classList.add('idle');
+    setText(pn.fishName, hk.state === 'reset' ? t('line_lost') : t('no_fish'));
+    setText(pn.status, '');
+    setWidth(pn.stFill, 0);
+    setText(pn.stVal, '---');
+  }
+  setWidth(pn.tFill, (hk.tension / CONFIG.TENSION_MAX) * 100);
+  setText(pn.tVal, pad(Math.min(hk.tension, CONFIG.TENSION_MAX), 3));
+  pn.tFill.classList.toggle('danger', hk.tension > 70);
+  setWidth(pn.rFill, (p.reelVel / CONFIG.MASH_MAX) * 100);
+  setText(pn.rVal, pad(p.reelVel / CONFIG.MASH_MAX * 100, 3));
+}
+
+
+/* ==========================================================================
+   19. KÖRÖK, SZINTEK, JÁTÉKMENET-VEZÉRLÉS
+   ========================================================================== */
+function setState(s) {
+  game.state = s;
+  game.stateTime = 0;
+}
+
+function resetPlayerHook(p) {
+  const x = game.numPlayers === 1 ? W / 2 : (p.index === 0 ? W * 0.3 : W * 0.7);
+  releaseFish(p);
+  p.hook.x = x;
+  p.hook.y = HOOK_MIN_Y + 30;
+  p.hook.state = 'free';
+  p.boat.x = x;
+  p.reelVel = 0;
+  p.sinceAction = 99;
+}
+
+function startGame() {
+  game.numPlayers = menu.players;
+  game.mode = menu.mode;
+  document.body.classList.toggle('two-player', game.numPlayers === 2);
+  game.players = [];
+  for (let i = 0; i < game.numPlayers; i++) game.players.push(makePlayer(i, game.numPlayers));
+  effects.particles = [];
+  effects.bubbles = [];
+  effects.popups = [];
+  effects.banners = [];
+  buildBackground(game.mode);
+
+  ui.startScreen.classList.add('hidden');
+  ui.gameoverScreen.classList.add('hidden');
+  ui.pauseScreen.classList.add('hidden');
+  Music.setDuck(1);
+  Music.play(game.mode);         // nappali vagy éjszakai zenék
+  setState('playing');
+  startRound(1);
+}
+
+function startRound(level) {
+  game.level = level;
+  game.diff = computeDifficulty(level);
+  game.target = CONFIG.TARGET_BASE + (level - 1) * CONFIG.TARGET_STEP;
+  game.timeLeft = CONFIG.ROUND_DURATION;
+  game.lastTick = -1;
+  game.event = null;
+  game.eventTimer = 0;
+  game.eventCooldown = CONFIG.EVENT_START_DELAY;
+  game.spawnTimer = 0;
+  game.predator = null;
+  resetPredatorTimer(true);
+  for (const p of game.players) {
+    p.roundScore = 0;
+    resetPlayerHook(p);
+  }
+  populate();
+
+  addBanner(t('ban_round', { n: level }), 1.4, '#ffc933', false);
+  addBanner(t('ban_target', { n: game.target }), 1.4, '#dfe8f5', false);
+  for (const [key, sp] of Object.entries(SPECIES)) {
+    if (sp.minLevel === level && level > 1) addBanner(t('ban_newfish', { name: fishName(key) }), 1.8, '#6cf06c', true);
+  }
+  if (level > 1) addBanner(t('ban_tougher'), 1.4, '#ff9a4a', false);
+  Sound.event();
+}
+
+// Valaki elérte a célt
+function roundClear(winner) {
+  const bonus = Math.ceil(game.timeLeft) * CONFIG.TIME_BONUS_PER_SEC;
+  winner.score += bonus;
+  winner.roundWins++;
+  for (const p of game.players) {
+    if (p.hook.fish) {
+      releaseFish(p);
+      p.hook.state = 'reset';
+    }
+  }
+  if (game.predator) predatorLeave(game.predator);
+  game.event = null;
+  effects.banners = [];
+  addBanner(game.numPlayers === 2
+    ? t('ban_winround', { p: pLabel(winner.index), n: game.level })
+    : t('ban_clear', { n: game.level }), 1.8, winner.style.tag, true);
+  addBanner(t('ban_bonus', { n: bonus }), 1.4, '#6cf06c', false);
+  game.clearTimer = 3.4;
+  setState('roundclear');
+  Sound.roundClear();
+}
+
+function pauseGame() {
+  if (game.state !== 'playing') return;
+  setState('paused');
+  pauseSel = 0;
+  refreshPause();
+  ui.pauseScreen.classList.remove('hidden');
+  Music.setDuck(0.4);
+}
+
+function resumeGame() {
+  if (game.state !== 'paused') return;
+  ui.pauseScreen.classList.add('hidden');
+  setState('playing');
+  Music.setDuck(1);
+}
+
+function toggleMute() {
+  Sound.muted = !Sound.muted;
+  Music.applyVolume();
+  addPopup(Sound.muted ? t('pop_sound_off') : t('pop_sound_on'), W / 2, 70, '#dfe8f5', 1, 1);
+}
+
+function updateTimer(dt) {
+  game.timeLeft -= dt;
+  const sec = Math.ceil(game.timeLeft);
+  if (sec <= 10 && sec > 0 && sec !== game.lastTick) {
+    game.lastTick = sec;
+    Sound.tick();
+  }
+  if (game.timeLeft <= 0) {
+    game.timeLeft = 0;
+    endGame();
+  }
+}
+
+function logHtml(p) {
+  const cls = p.index === 0 ? 'p1c' : 'p2c';
+  const title = game.numPlayers === 2 ? t('log_title_p', { p: pLabel(p.index) }) : t('log_title');
+  const items = p.log.slice().reverse().map((c) =>
+    `<li><span class="${cls}">${c.nick}</span> - ${c.species} ${c.weight.toFixed(2)}KG +${c.pts}</li>`
+  ).join('');
+  return `<div><h3>${title}</h3><ul>${items || `<li>${t('log_empty')}</li>`}</ul></div>`;
+}
+
+function endGame() {
+  for (const p of game.players) {
+    if (p.hook.fish) {
+      releaseFish(p);
+      p.hook.state = 'reset';
+    }
+  }
+  if (game.predator) predatorLeave(game.predator);
+  game.event = null;
+  setState('gameover');
+
+  const ps = game.players;
+  const two = game.numPlayers === 2;
+
+  // Cím és győztes
+  ui.goTitle.className = 'go-title';
+  if (two) {
+    const [a, b] = ps;
+    let winner = null;
+    if (a.roundWins !== b.roundWins) winner = a.roundWins > b.roundWins ? a : b;
+    else if (a.score !== b.score) winner = a.score > b.score ? a : b;
+    ui.goTitle.textContent = winner ? t('go_wins', { p: pLabel(winner.index) }) : t('go_draw');
+    if (winner) ui.goTitle.classList.add(winner.index === 0 ? 'p1win' : 'p2win');
+  } else {
+    ui.goTitle.textContent = t('go_timeup');
+  }
+  ui.goSub.textContent = t('go_sub', { n: game.level, shift: t('mode_' + game.mode) });
+
+  // Statisztika tábla
+  const fmtBig = (p) => (p.biggest ? `${p.biggest.name} ${p.biggest.weight.toFixed(2)}KG` : '---');
+  const fmtRare = (p) => (p.rarest ? p.rarest.name : '---');
+  const rows = [
+    [t('stat_total'), (p) => pad(p.score, 5)],
+    [t('stat_caught'), (p) => pad(p.caught, 2)],
+    [t('stat_biggest'), fmtBig],
+    [t('stat_rarest'), fmtRare],
+    [t('stat_eaten'), (p) => pad(p.eaten, 2)]
+  ];
+  if (two) rows.splice(1, 0, [t('stat_rounds'), (p) => pad(p.roundWins, 2)]);
+
+  let html = two ? `<tr><th></th><th class="c1">${pLabel(0)}</th><th class="c2">${pLabel(1)}</th></tr>` : '';
+  for (const [label, fn] of rows) {
+    html += `<tr><td>${label}</td>${ps.map((p, i) => `<td class="c${i + 1}">${fn(p)}</td>`).join('')}</tr>`;
+  }
+  ui.goStats.innerHTML = html;
+
+  // Rekord (csak 1 játékosnál), elmentve
+  if (!two) {
+    const p = ps[0];
+    if (p.score > bestScores[game.mode]) {
+      bestScores[game.mode] = p.score;
+      Store.set('best', bestScores);
+      ui.goRecord.textContent = t('record_new');
+      ui.goRecord.classList.add('new');
+    } else {
+      ui.goRecord.textContent = t('record_best', { n: pad(bestScores[game.mode], 5) });
+      ui.goRecord.classList.remove('new');
+    }
+  } else {
+    ui.goRecord.textContent = '';
+  }
+
+  ui.goLog.innerHTML = ps.map(logHtml).join('');
+  ui.gameoverScreen.classList.remove('hidden');
+  Music.play('menu');
+  Sound.gameOver();
+}
+
+function showMenu() {
+  setState('start');
+  ui.gameoverScreen.classList.add('hidden');
+  ui.pauseScreen.classList.add('hidden');
+  ui.startScreen.classList.remove('hidden');
+  document.body.classList.remove('two-player');
+  Music.setDuck(1);
+  Music.play('menu');
+  menu.row = 0;
+  menu.action = 'start';
+  setupAttract();
+}
+
+// Kezdőképernyő: élő háttér egy "üres" horgásszal
+function setupAttract() {
+  game.numPlayers = 1;
+  game.mode = menu.mode;
+  game.level = 1;
+  game.diff = computeDifficulty(1);
+  game.target = CONFIG.TARGET_BASE;
+  game.timeLeft = CONFIG.ROUND_DURATION;
+  game.event = null;
+  game.predator = null;
+  game.players = [makePlayer(0, 1)];
+  effects.banners = [];
+  buildBackground(game.mode);
+  populate();
+  refreshMenu();
+}
+
+
+/* ==========================================================================
+   20. FŐ CIKLUS
+   ========================================================================== */
+function update(dt) {
+  game.stateTime += dt;
+  if (game.state === 'paused') return;
+
+  game.time += dt;
+  if (game.shake > 0) game.shake -= dt;
+  if (game.timeFlash > 0) game.timeFlash -= dt;
+
+  if (game.state === 'playing') updateTimer(dt);
+  if (game.state === 'playing') {
+    updateEvents(dt);
+    for (const p of game.players) updateHook(p, dt);
+  } else {
+    for (const p of game.players) idleHook(p, dt);
+  }
+
+  if (game.state === 'roundclear') {
+    game.clearTimer -= dt;
+    if (game.clearTimer <= 0) {
+      setState('playing');
+      startRound(game.level + 1);
+    }
+  }
+
+  updatePredator(dt);
+  updateSpawning(dt);
+  for (const f of game.fish) updateFish(f, dt);
+  cleanupFish();
+  for (const p of game.players) updateBoat(p, dt);
+  updateEffects(dt);
+}
+
+let lastTime = performance.now();
+
+function frame(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+  Music.update(dt);
+  pollInput();
+  update(dt);
+  render();
+  updateHUD();
+  requestAnimationFrame(frame);
+}
+
+Music.init();
+setupAttract();
+applyI18n();
+Music.unlock();                // az .exe-ben azonnal szól; böngészőben az első gombnyomásra
+if (isDesktop) Sound.init();   // az .exe-ben a hang gombnyomás nélkül is indulhat
+requestAnimationFrame(frame);

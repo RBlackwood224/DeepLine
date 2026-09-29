@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deep Line</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="game-wrapper">
+
+    <!-- Felső HUD -->
+    <header id="hud">
+      <div class="hud-item"><span id="p1-label" class="label">SCORE</span> <span id="p1-score" class="value p1c">00000</span></div>
+      <div class="hud-item"><span class="label" data-i18n="hud_round">ROUND</span> <span id="round" class="value">01</span></div>
+      <div class="hud-item"><span class="label" data-i18n="hud_target">TARGET</span> <span id="target" class="value">0150</span></div>
+      <div class="hud-item"><span class="label" data-i18n="hud_time">TIME</span> <span id="time" class="value">01:30</span></div>
+      <div class="hud-item only-2p"><span class="label" data-i18n="tag_p2">P2</span> <span id="p2-score" class="value p2c">00000</span></div>
+      <div class="hud-item"><span id="mode" class="mode-tag">DAY</span></div>
+    </header>
+
+    <!-- Játéktér -->
+    <div id="screen">
+      <canvas id="game" width="320" height="240"></canvas>
+
+      <!-- Kezdőképernyő -->
+      <div id="start-screen" class="overlay">
+        <h1 class="title">DEEP LINE</h1>
+        <p class="subtitle" data-i18n="subtitle">A RETRO FISHING CONTEST</p>
+
+        <div class="menu-row active" data-row="0">
+          <span class="menu-label" data-i18n="menu_players">PLAYERS</span>
+          <button class="opt selected" data-row="players" data-value="1" data-i18n="opt_1p">1P</button>
+          <button class="opt" data-row="players" data-value="2" data-i18n="opt_2p">2P VERSUS</button>
+        </div>
+        <div class="menu-row" data-row="1">
+          <span class="menu-label" data-i18n="menu_shift">SHIFT</span>
+          <button class="opt selected" data-row="mode" data-value="day" data-i18n="mode_day">DAY</button>
+          <button class="opt" data-row="mode" data-value="night" data-i18n="mode_night">NIGHT</button>
+        </div>
+        <div class="menu-row" data-row="2">
+          <span class="menu-label" data-i18n="menu_lang">LANGUAGE</span>
+          <button class="opt lang-opt selected" data-row="lang" data-value="en">ENGLISH</button>
+          <button class="opt lang-opt" data-row="lang" data-value="fr">FRANÇAIS</button>
+        </div>
+        <p id="menu-desc" class="mode-desc"></p>
+
+        <div class="buttons menu-row action-row" data-row="3">
+          <button id="btn-start" class="start-btn act-btn" data-act="start" data-i18n="btn_start">START</button>
+          <button id="btn-options" class="act-btn" data-act="options" data-i18n="btn_options">OPTIONS</button>
+          <button id="btn-exit" class="act-btn desktop-only" data-act="exit" data-i18n="btn_exit">EXIT</button>
+        </div>
+
+        <div class="controls">
+          <p><span class="tag tag-p1" data-i18n="tag_p1">P1</span> <span data-i18n="ctrl_p1"></span></p>
+          <p><span class="tag tag-p2" data-i18n="tag_p2">P2</span> <span data-i18n="ctrl_p2"></span></p>
+          <p><span class="tag">PAD</span> <span data-i18n="ctrl_pad"></span></p>
+          <p class="dim" data-i18n="ctrl_mash"></p>
+        </div>
+        <p id="pad-status" class="pad-status"></p>
+        <p class="blink" data-i18n="menu_hint"></p>
+      </div>
+
+      <!-- Szünet menü -->
+      <div id="pause-screen" class="overlay hidden">
+        <h2 class="pause-title" data-i18n="pause_title">PAUSED</h2>
+        <div class="pause-menu">
+          <button class="pause-opt selected" data-action="resume" data-i18n="btn_resume">RESUME</button>
+          <button class="pause-opt" data-action="restart" data-i18n="btn_restart">RESTART</button>
+          <button class="pause-opt" data-action="options" data-i18n="btn_options">OPTIONS</button>
+          <button class="pause-opt" data-action="menu" data-i18n="btn_menu">MAIN MENU</button>
+          <button class="pause-opt desktop-only" data-action="exit" data-i18n="btn_exit">EXIT</button>
+        </div>
+        <p class="hint" data-i18n="pause_hint"></p>
+      </div>
+
+      <!-- Beállítások: hangerő -->
+      <div id="options-screen" class="overlay hidden">
+        <h2 class="pause-title" data-i18n="opt_title">OPTIONS</h2>
+        <div class="vol-list">
+          <div class="vol-row active" data-vol="music">
+            <span class="vol-label" data-i18n="opt_music">MUSIC</span>
+            <button class="vol-btn" data-dir="-1">-</button>
+            <div class="vol-bar"><div class="vol-fill"></div></div>
+            <button class="vol-btn" data-dir="1">+</button>
+            <span class="vol-val">060%</span>
+          </div>
+          <div class="vol-row" data-vol="sfx">
+            <span class="vol-label" data-i18n="opt_sfx">SOUND EFFECTS</span>
+            <button class="vol-btn" data-dir="-1">-</button>
+            <div class="vol-bar"><div class="vol-fill"></div></div>
+            <button class="vol-btn" data-dir="1">+</button>
+            <span class="vol-val">080%</span>
+          </div>
+        </div>
+        <button id="btn-options-back" data-i18n="btn_back">BACK</button>
+        <p class="hint" data-i18n="opt_hint"></p>
+      </div>
+
+      <!-- Game Over -->
+      <div id="gameover-screen" class="overlay hidden">
+        <h2 id="go-title" class="go-title">GAME OVER</h2>
+        <p id="go-sub" class="subtitle"></p>
+        <table id="go-stats" class="stats"></table>
+        <p id="go-record" class="record"></p>
+        <div id="go-log" class="catch-log"></div>
+        <div class="buttons">
+          <button id="btn-again" data-i18n="btn_again">PLAY AGAIN</button>
+          <button id="btn-menu" data-i18n="btn_menu">MAIN MENU</button>
+        </div>
+        <p class="hint" data-i18n="go_hint"></p>
+      </div>
+    </div>
+
+    <!-- Játékos panelek -->
+    <section id="panels">
+      <div class="panel idle" id="panel-1">
+        <div class="panel-head">
+          <span class="tag tag-p1" data-i18n="tag_p1">P1</span>
+          <span class="fish-name">NO FISH ON LINE</span>
+          <span class="fight-status"></span>
+        </div>
+        <div class="panel-stats">
+          <span><span data-i18n="panel_depth">DEPTH</span> <b class="depth">00</b><i>m</i></span>
+          <span><span data-i18n="panel_fish">FISH</span> <b class="fish">00</b></span>
+          <span><span data-i18n="panel_rpts">ROUND PTS</span> <b class="rpts">0000</b></span>
+        </div>
+        <div class="meter"><div class="meter-head"><span data-i18n="m_stamina">STAMINA</span><span class="stamina-val">---</span></div><div class="bar"><div class="fill stamina-fill"></div></div></div>
+        <div class="meter"><div class="meter-head"><span data-i18n="m_tension">LINE TENSION</span><span class="tension-val">000</span></div><div class="bar"><div class="fill tension-fill"></div></div></div>
+        <div class="meter"><div class="meter-head"><span data-i18n="m_reel">REEL POWER</span><span class="reel-val">000</span></div><div class="bar thin"><div class="fill reel-fill"></div></div></div>
+      </div>
+
+      <div class="panel idle only-2p" id="panel-2">
+        <div class="panel-head">
+          <span class="tag tag-p2" data-i18n="tag_p2">P2</span>
+          <span class="fish-name">NO FISH ON LINE</span>
+          <span class="fight-status"></span>
+        </div>
+        <div class="panel-stats">
+          <span><span data-i18n="panel_depth">DEPTH</span> <b class="depth">00</b><i>m</i></span>
+          <span><span data-i18n="panel_fish">FISH</span> <b class="fish">00</b></span>
+          <span><span data-i18n="panel_rpts">ROUND PTS</span> <b class="rpts">0000</b></span>
+        </div>
+        <div class="meter"><div class="meter-head"><span data-i18n="m_stamina">STAMINA</span><span class="stamina-val">---</span></div><div class="bar"><div class="fill stamina-fill"></div></div></div>
+        <div class="meter"><div class="meter-head"><span data-i18n="m_tension">LINE TENSION</span><span class="tension-val">000</span></div><div class="bar"><div class="fill tension-fill"></div></div></div>
+        <div class="meter"><div class="meter-head"><span data-i18n="m_reel">REEL POWER</span><span class="reel-val">000</span></div><div class="bar thin"><div class="fill reel-fill"></div></div></div>
+      </div>
+    </section>
+
+    <footer class="help" data-i18n="help"></footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
