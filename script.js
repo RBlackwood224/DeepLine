@@ -19,6 +19,9 @@
      - háttérzene: külön menü / nappali / éjszakai lejátszási lista, áttűnéssel
      - könnyebb nehézség, a damil "piros zónája" figyelmeztet szakadás előtt
      - rövidebb kör, de minden fogás bónuszidőt ad (nehezebb hal = több idő)
+   v6:
+     - zene globálisan 20%-kal halkabb (MUSIC_MASTER), nagyobb képernyő, FULLSCREEN opció
+     - automatikus méretezés: a játék minden felbontáson teljesen befér
      - OPTIONS menü: külön zene- és effekt-hangerő (mentve)
      - nyelvek: English (alap) / Français
 
@@ -51,6 +54,8 @@
    ========================================================================== */
 const CONFIG = {
   // --- Körök és szintek ---
+  MUSIC_MASTER: 0.8,            // a zene teljes erejének szorzója (0.8 = 20%-kal halkabb); kisebb = halkabb
+
   ROUND_DURATION: 60,           // a kör induló ideje (mp) – minden fogás bónuszidőt ad
   TIME_MAX: 99,                 // ennél több idő nem gyűlhet össze
   CATCH_TIME_MULTIPLIER: 1.0,   // globális szorzó a fogásonkénti bónuszidőre
@@ -192,7 +197,7 @@ const I18N = {
     pad_one: "1 CONTROLLER CONNECTED (PAD 1 = P1)",
     pad_many: "{n} CONTROLLERS CONNECTED (PAD 1 = P1, PAD 2 = P2)",
     menu_hint: `↑↓ ←→ CHOOSE${GAP}ENTER CONFIRM`,
-    help: `P / ESC PAUSE${GAP}M SOUND${GAP}F11 FULLSCREEN${GAP}STAY SHALLOW WHEN THE SHARK HUNTS!`,
+    help: `P / ESC PAUSE${GAP}M SOUND${GAP}STAY SHALLOW WHEN THE SHARK HUNTS!`,
     pause_title: "PAUSED", btn_resume: "RESUME", btn_restart: "RESTART", btn_menu: "MAIN MENU",
     pause_hint: "ESC / PAD START: RESUME",
     go_timeup: "TIME UP!", go_wins: "{p} WINS!", go_draw: "DRAW!",
@@ -219,6 +224,7 @@ const I18N = {
     pop_sound_on: "SOUND ON", pop_sound_off: "SOUND OFF",
     ev_frenzy: "FRENZY", ev_calm: "CALM", shark: "SHARK",
     btn_options: "OPTIONS", opt_title: "OPTIONS", opt_music: "MUSIC", opt_sfx: "SOUND EFFECTS",
+    opt_fullscreen: "FULLSCREEN", opt_on: "ON", opt_off: "OFF",
     btn_back: "BACK", opt_hint: `↑↓ SELECT${GAP}←→ ADJUST${GAP}ESC BACK`,
     fish_minnow: "MINNOW", fish_perch: "PERCH", fish_puffer: "PUFFER", fish_bass: "BASS",
     fish_needle: "NEEDLEFISH", fish_eel: "EEL", fish_squid: "GLOW SQUID", fish_angler: "ANGLER",
@@ -245,7 +251,7 @@ const I18N = {
     pad_one: "1 MANETTE CONNECTÉE (MANETTE 1 = J1)",
     pad_many: "{n} MANETTES CONNECTÉES (MANETTE 1 = J1, MANETTE 2 = J2)",
     menu_hint: `↑↓ ←→ CHOISIR${GAP}ENTRÉE VALIDER`,
-    help: `P / ÉCHAP PAUSE${GAP}M SON${GAP}F11 PLEIN ÉCRAN${GAP}RESTE EN SURFACE QUAND LE REQUIN CHASSE !`,
+    help: `P / ÉCHAP PAUSE${GAP}M SON${GAP}RESTE EN SURFACE QUAND LE REQUIN CHASSE !`,
     pause_title: "PAUSE", btn_resume: "REPRENDRE", btn_restart: "RECOMMENCER", btn_menu: "MENU PRINCIPAL",
     pause_hint: "ÉCHAP / START : REPRENDRE",
     go_timeup: "TEMPS ÉCOULÉ !", go_wins: "{p} GAGNE !", go_draw: "ÉGALITÉ !",
@@ -272,6 +278,7 @@ const I18N = {
     pop_sound_on: "SON ACTIVÉ", pop_sound_off: "SON COUPÉ",
     ev_frenzy: "FRÉNÉSIE", ev_calm: "CALME", shark: "REQUIN",
     btn_options: "OPTIONS", opt_title: "OPTIONS", opt_music: "MUSIQUE", opt_sfx: "EFFETS SONORES",
+    opt_fullscreen: "PLEIN ÉCRAN", opt_on: "OUI", opt_off: "NON",
     btn_back: "RETOUR", opt_hint: `↑↓ CHOISIR${GAP}←→ RÉGLER${GAP}ÉCHAP RETOUR`,
     fish_minnow: "VAIRON", fish_perch: "PERCHE", fish_puffer: "POISSON-GLOBE", fish_bass: "BAR",
     fish_needle: "ORPHIE", fish_eel: "ANGUILLE", fish_squid: "CALMAR LUMINEUX", fish_angler: "BAUDROIE",
@@ -302,6 +309,13 @@ let lang = LANGS.includes(Store.get('lang', 'en')) ? Store.get('lang', 'en') : '
 
 // Hangerő-beállítások (0..1), mentve
 const settings = Object.assign({ music: 0.6, sfx: 0.8 }, Store.get('volume', {}));
+
+// Egyszeri visszaállítás: a zene új hangerő-skálájánál mindenki 60%-ról indul
+if (Store.get('volumeVersion', 1) < 2) {
+  settings.music = 0.6;
+  Store.set('volume', settings);
+  Store.set('volumeVersion', 2);
+}
 
 function t(key, vars) {
   let s = (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
@@ -986,7 +1000,7 @@ const Music = {
   },
 
   applyVolume() {
-    const base = Sound.muted ? 0 : settings.music * this.duck;
+    const base = Sound.muted ? 0 : settings.music * CONFIG.MUSIC_MASTER * this.duck;
     for (const tr of [this.cur, this.out]) {
       if (tr) tr.audio.volume = clamp(base * tr.fade, 0, 1);
     }
@@ -1192,7 +1206,7 @@ function pollInput() {
       if (e.down) optionsMove(1);
       if (e.left) optionsAdjust(-1);
       if (e.right) optionsAdjust(1);
-      if (e.reel && optSel === 2) closeOptions();
+      if (e.reel) optionsConfirm();
       else if (e.tug || e.start || e.back) closeOptions();
       continue;
     }
@@ -1282,7 +1296,8 @@ const ui = {
   pauseScreen: $('#pause-screen'), pauseOpts: Array.from(document.querySelectorAll('.pause-opt')),
   btnOptions: $('#btn-options'), actBtns: document.querySelectorAll('.act-btn'),
   optionsScreen: $('#options-screen'), volRows: Array.from(document.querySelectorAll('.vol-row')),
-  volBtns: document.querySelectorAll('.vol-btn'), btnOptBack: $('#btn-options-back')
+  volBtns: document.querySelectorAll('.vol-btn'), btnOptBack: $('#btn-options-back'),
+  fsRow: $('#fs-row'), btnFullscreen: $('#btn-fullscreen')
 };
 
 function setText(el, txt) {
@@ -1437,7 +1452,8 @@ ui.pauseOpts.forEach((b) => {
 // --- OPTIONS: zene és effektek hangereje
 let optionsOpen = false;
 let optionsReturn = 'start';
-let optSel = 0;                    // 0 = zene, 1 = effektek, 2 = vissza
+let optSel = 0;                    // 0 = zene, 1 = effektek, 2 = teljes képernyő, 3 = vissza
+const OPT_COUNT = 4;
 const VOL_KEYS = ['music', 'sfx'];
 
 function openOptions(from) {
@@ -1468,11 +1484,40 @@ function refreshOptions() {
     row.querySelector('.vol-fill').style.width = pct + '%';
     row.querySelector('.vol-val').textContent = pad(pct, 3) + '%';
   });
-  ui.btnOptBack.classList.toggle('selected', optSel === 2);
+  ui.fsRow.classList.toggle('active', optSel === 2);
+  ui.btnFullscreen.textContent = isFullscreen() ? t('opt_on') : t('opt_off');
+  ui.btnFullscreen.classList.toggle('selected', isFullscreen());
+  ui.btnOptBack.classList.toggle('selected', optSel === 3);
 }
 
+// --- Teljes képernyő (a böngésző Fullscreen API-jával; F11 is működik)
+function isFullscreen() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+function toggleFullscreen() {
+  const root = document.documentElement;
+  try {
+    if (isFullscreen()) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      const req = root.requestFullscreen || root.webkitRequestFullscreen;
+      if (req) {
+        const p = req.call(root);
+        if (p && p.catch) p.catch(() => {});
+      }
+    }
+  } catch (e) {
+    // ha a böngésző nem engedi, marad ablakban
+  }
+  Sound.select();
+}
+
+document.addEventListener('fullscreenchange', () => { if (optionsOpen) refreshOptions(); });
+document.addEventListener('webkitfullscreenchange', () => { if (optionsOpen) refreshOptions(); });
+
 function optionsMove(d) {
-  optSel = (optSel + d + 3) % 3;
+  optSel = (optSel + d + OPT_COUNT) % OPT_COUNT;
   refreshOptions();
   Sound.select();
 }
@@ -1487,6 +1532,13 @@ function changeVolume(key, dir) {
 
 function optionsAdjust(dir) {
   if (optSel < 2) changeVolume(VOL_KEYS[optSel], dir);
+  else if (optSel === 2) toggleFullscreen();
+}
+
+// ENTER / A gomb az OPTIONS menüben
+function optionsConfirm() {
+  if (optSel === 2) toggleFullscreen();
+  else if (optSel === 3) closeOptions();
 }
 
 function handleOptionsKey(code) {
@@ -1494,7 +1546,7 @@ function handleOptionsKey(code) {
   else if (code === 'ArrowDown' || code === 'KeyS') optionsMove(1);
   else if (code === 'ArrowLeft' || code === 'KeyA') optionsAdjust(-1);
   else if (code === 'ArrowRight' || code === 'KeyD') optionsAdjust(1);
-  else if ((code === 'Enter' || code === 'Space') && optSel === 2) closeOptions();
+  else if (code === 'Enter' || code === 'Space') optionsConfirm();
   else if (code === 'Escape' || code === 'KeyP' || code === 'Backspace') closeOptions();
   else if (code === 'KeyM') toggleMute();
 }
@@ -1513,6 +1565,13 @@ ui.btnOptions.addEventListener('click', (e) => {
   e.currentTarget.blur();
   Sound.init();
   if (game.state === 'start' && !optionsOpen) openOptions('start');
+});
+
+ui.btnFullscreen.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  optSel = 2;
+  toggleFullscreen();
+  refreshOptions();
 });
 
 ui.btnOptBack.addEventListener('click', (e) => {
@@ -2720,6 +2779,8 @@ function updatePanel(pn, p) {
 function setState(s) {
   game.state = s;
   game.stateTime = 0;
+  document.body.classList.toggle('in-game', s === 'playing' || s === 'paused' || s === 'roundclear');
+  scheduleFit();
 }
 
 function resetPlayerHook(p) {
@@ -2948,6 +3009,55 @@ function setupAttract() {
 
 
 /* ==========================================================================
+   19/B. ELRENDEZÉS – a játék mindig teljesen beférjen az ablakba
+   A pontsáv, a panelek és a súgósor tényleges magasságát lemérjük, és a
+   játékteret (4:3, torzítás nélkül) akkorára méretezzük, amekkora még kifér.
+   ========================================================================== */
+const LAYOUT = {
+  MAX_WIDTH: 1056,      // ablakban legfeljebb ekkora (teljes képernyőn nincs felső határ)
+  MARGIN: 20            // a lap szélein hagyott hely (px)
+};
+
+let fitPending = false;
+
+function fitLayout() {
+  fitPending = false;
+  const wrap = document.getElementById('game-wrapper');
+  const scr = document.getElementById('screen');
+  const cap = isFullscreen() ? Infinity : LAYOUT.MAX_WIDTH;
+  // két kör: a panelek magassága kicsit függ a szélességtől
+  for (let i = 0; i < 2; i++) {
+    const chrome = wrap.offsetHeight - scr.offsetHeight;          // pontsáv + panelek + súgó + rések
+    const borderW = scr.offsetWidth - canvas.offsetWidth;          // a játéktér kerete
+    const borderH = scr.offsetHeight - canvas.offsetHeight;
+    const canvasH = window.innerHeight - LAYOUT.MARGIN - chrome - borderH;
+    const width = Math.floor(Math.max(300, Math.min(window.innerWidth * 0.96, cap, canvasH * 4 / 3 + borderW)));
+    if (Math.abs(wrap.offsetWidth - width) <= 1) break;
+    wrap.style.width = width + 'px';
+  }
+}
+
+function scheduleFit() {
+  if (fitPending) return;
+  fitPending = true;
+  requestAnimationFrame(fitLayout);
+}
+
+function initLayout() {
+  window.addEventListener('resize', scheduleFit);
+  document.addEventListener('fullscreenchange', scheduleFit);
+  document.addEventListener('webkitfullscreenchange', scheduleFit);
+  // ha a pontsáv vagy a panelek magassága változik (pl. 2 játékos, hosszabb szöveg)
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(scheduleFit);
+    ro.observe(document.getElementById('hud'));
+    ro.observe(document.getElementById('panels'));
+  }
+  fitLayout();
+}
+
+
+/* ==========================================================================
    20. FŐ CIKLUS
    ========================================================================== */
 function update(dt) {
@@ -2998,6 +3108,7 @@ function frame(now) {
 Music.init();
 setupAttract();
 applyI18n();
+initLayout();
 Music.unlock();                // az .exe-ben azonnal szól; böngészőben az első gombnyomásra
 if (isDesktop) Sound.init();   // az .exe-ben a hang gombnyomás nélkül is indulhat
 requestAnimationFrame(frame);

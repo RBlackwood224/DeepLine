@@ -39,7 +39,8 @@ body {
 body:not(.two-player) .only-2p { display: none !important; }
 
 #game-wrapper {
-  width: min(96vw, 960px, calc((100vh - 190px) * 4 / 3));
+  /* 4:3 arány mindig megmarad, csak a méret változik (max. 10%-kal nagyobb, mint korábban) */
+  width: min(96vw, 1056px, calc((100vh - 175px) * 4 / 3));
   min-width: 300px;
   display: flex;
   flex-direction: column;
@@ -351,3 +352,21 @@ body:not(.desktop) .desktop-only { display: none !important; }
 
 /* v5: bónuszidő villanás */
 #time.bonus { color: var(--green); }
+
+/* ---------- v6: nagyobb képernyő, teljes képernyő opció ---------- */
+body.in-game .help { display: none; }
+
+/* teljes képernyőn a képernyő méretéhez igazodik (arányosan, torzítás nélkül) */
+/* a pontos méretet a script.js fitLayout() függvénye számolja ki */
+
+.fs-row {
+  display: grid;
+  grid-template-columns: 11em auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border: 2px solid transparent;
+}
+.fs-row.active { border-color: var(--border); background: rgba(44, 61, 99, 0.35); }
+.fs-btn { min-width: 5em; }
+.fs-btn.selected { background: var(--green); color: #000; border-color: #fff; }
