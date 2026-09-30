@@ -2,7 +2,9 @@
 <html lang="hu">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>Deep Line</title>
   <link rel="stylesheet" href="style.css">
   <!-- PeerJS: a gépek közötti online kapcsolathoz (ha nem töltődik be, a játék offline ugyanúgy megy) -->
@@ -70,6 +72,10 @@
         <p id="vote-title" class="vote-title"></p>
         <p id="vote-count" class="vote-count"></p>
         <p id="vote-keys" class="hint"></p>
+        <div id="vote-btns" class="buttons">
+          <button id="vote-yes" data-i18n="btn_yes">YES</button>
+          <button id="vote-no" data-i18n="btn_no">NO</button>
+        </div>
       </div>
 
       <!-- Kódbeírás online csatlakozáshoz -->
@@ -79,6 +85,9 @@
         <div class="code-boxes">
           <span class="code-box"></span><span class="code-box"></span><span class="code-box"></span>
           <span class="code-box"></span><span class="code-box"></span><span class="code-box"></span>
+          <!-- láthatatlan mező: telefonon erre bökve jön fel a billentyűzet -->
+          <input id="code-input" class="code-input" type="text" inputmode="text" autocapitalize="characters"
+                 autocomplete="off" autocorrect="off" spellcheck="false" maxlength="6" aria-label="Room code">
         </div>
         <div class="buttons">
           <button id="btn-code-join" data-i18n="btn_join">JOIN</button>
@@ -150,6 +159,7 @@
         </div>
         <p class="hint" data-i18n="join_keys"></p>
         <p class="hint" data-i18n="join_names"></p>
+        <p class="hint touch-only" data-i18n="join_touch"></p>
 
         <!-- Online szoba (host) -->
         <div id="online-box" class="online-box">
@@ -202,6 +212,10 @@
         <div id="fs-row" class="fs-row">
           <span class="vol-label" data-i18n="opt_fullscreen">FULLSCREEN</span>
           <button id="btn-fullscreen" class="fs-btn">OFF</button>
+        </div>
+        <div id="vib-row" class="fs-row">
+          <span class="vol-label" data-i18n="opt_vibration">VIBRATION</span>
+          <button id="btn-vibration" class="fs-btn">ON</button>
         </div>
         <button id="btn-options-back" data-i18n="btn_back">BACK</button>
         <p class="hint" data-i18n="opt_hint"></p>
@@ -286,6 +300,18 @@
         <div class="meter"><div class="meter-head"><span data-i18n="m_tension">LINE TENSION</span><span class="tension-val">000</span></div><div class="bar"><div class="fill tension-fill"></div></div></div>
         <div class="meter"><div class="meter-head"><span data-i18n="m_reel">REEL POWER</span><span class="reel-val">000</span></div><div class="bar thin"><div class="fill reel-fill"></div></div></div>
       </div>
+    </div>
+
+    <!-- Érintéses irányítás (telefon / tablet) -->
+    <div id="touch-ui" class="touch-ui">
+      <div id="touch-stick-zone" class="touch-zone">
+        <div id="stick-base" class="stick-base idle"><div id="stick-knob" class="stick-knob"></div></div>
+      </div>
+      <div class="touch-buttons">
+        <button id="touch-tug" class="touch-btn tug">TUG</button>
+        <button id="touch-reel" class="touch-btn reel">REEL</button>
+      </div>
+      <button id="touch-pause" class="touch-pause">&#10074;&#10074;</button>
     </div>
 
     <footer class="help" data-i18n="help"></footer>

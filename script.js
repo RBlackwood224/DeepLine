@@ -33,6 +33,10 @@
    v11:
      - belépés 6 jegyű szobakóddal, szavazásos kirúgás, ping, kisebb késés (saját horog azonnal)
      - széles képernyőn a játékos-panelek a két oldalra kerülnek (2x2), nagyobb játéktér
+   v12:
+     - vendég mód: a COPY LINK linkjével (?guest) csak JOIN ONLINE és OPTIONS érhető el
+   v13:
+     - telefonos irányítás: érintéses joystick + REEL / TUG gomb, rezgés (OPTIONS-ban kapcsolható)
      - OPTIONS menü: külön zene- és effekt-hangerő (mentve)
      - nyelvek: English (alap) / Français
 
@@ -209,9 +213,11 @@ const I18N = {
     join_keys: `KEYBOARD: SPACE (ARROWS) OR F (WASD)${GAP}CONTROLLER: A`,
     join_start: `ENTER / START: PLAY${GAP}PAD B: LEAVE${GAP}ESC: BACK`,
     join_names: `SPACE / F AGAIN: TYPE YOUR NAME${GAP}PAD Y: RANDOM NAME`,
+    opt_vibration: "VIBRATION", opt_na: "N/A", btn_yes: "YES", btn_no: "NO", dev_touch: "TOUCH SCREEN",
+    join_touch: "PHONE / TABLET: TAP AN EMPTY SLOT TO JOIN",
     btn_host: "OPEN ONLINE ROOM", btn_copy_link: "COPY LINK", btn_copy_code: "COPY CODE",
     copied: "LINK COPIED!", copied_code: "CODE COPIED!", online_code_label: "ROOM CODE",
-    btn_online: "JOIN ONLINE", btn_join: "JOIN", code_title: "JOIN ONLINE", code_prompt: "ENTER THE ROOM CODE",
+    btn_online: "JOIN ONLINE", btn_join: "JOIN", guest_desc: "GUEST MODE - ASK THE HOST FOR THE ROOM CODE", code_title: "JOIN ONLINE", code_prompt: "ENTER THE ROOM CODE",
     code_hint: `TYPE OR PASTE THE CODE${GAP}PAD: ←→ ↑↓ A`,
     btn_vote_kick: "VOTE KICK", kick_hint: `↑↓ CHOOSE${GAP}ENTER / A: START VOTE${GAP}ESC / B: BACK`,
     vote_title: "KICK {name}?", vote_count: "YES {y}   NO {n}   NEEDED {need}   {t}S",
@@ -288,9 +294,11 @@ const I18N = {
     join_keys: `CLAVIER : ESPACE (FLÈCHES) OU F (ZQSD)${GAP}MANETTE : A`,
     join_start: `ENTRÉE / START : JOUER${GAP}MANETTE B : QUITTER${GAP}ÉCHAP : RETOUR`,
     join_names: `ESPACE / F ENCORE : TON NOM${GAP}MANETTE Y : NOM AU HASARD`,
+    opt_vibration: "VIBRATION", opt_na: "N/D", btn_yes: "OUI", btn_no: "NON", dev_touch: "ÉCRAN TACTILE",
+    join_touch: "TÉLÉPHONE / TABLETTE : TOUCHE UNE PLACE LIBRE",
     btn_host: "OUVRIR UN SALON EN LIGNE", btn_copy_link: "COPIER LE LIEN", btn_copy_code: "COPIER LE CODE",
     copied: "LIEN COPIÉ !", copied_code: "CODE COPIÉ !", online_code_label: "CODE DU SALON",
-    btn_online: "JOUER EN LIGNE", btn_join: "REJOINDRE", code_title: "JOUER EN LIGNE", code_prompt: "ENTRE LE CODE DU SALON",
+    btn_online: "JOUER EN LIGNE", btn_join: "REJOINDRE", guest_desc: "MODE INVITÉ - DEMANDE LE CODE DU SALON À L'HÔTE", code_title: "JOUER EN LIGNE", code_prompt: "ENTRE LE CODE DU SALON",
     code_hint: `TAPE OU COLLE LE CODE${GAP}MANETTE : ←→ ↑↓ A`,
     btn_vote_kick: "VOTE D'EXCLUSION", kick_hint: `↑↓ CHOISIR${GAP}ENTRÉE / A : VOTER${GAP}ÉCHAP / B : RETOUR`,
     vote_title: "EXCLURE {name} ?", vote_count: "OUI {y}   NON {n}   REQUIS {need}   {t}S",
@@ -373,7 +381,7 @@ const Store = {
 let lang = LANGS.includes(Store.get('lang', 'en')) ? Store.get('lang', 'en') : 'en';
 
 // Hangerő-beállítások (0..1), mentve
-const settings = Object.assign({ music: 0.6, sfx: 0.8 }, Store.get('volume', {}));
+const settings = Object.assign({ music: 0.6, sfx: 0.8, vibrate: true }, Store.get('volume', {}));
 
 // Egyszeri visszaállítás: a zene új hangerő-skálájánál mindenki 60%-ról indul
 if (Store.get('volumeVersion', 1) < 2) {
@@ -1188,6 +1196,11 @@ const BLOCK_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 
 window.addEventListener('keydown', (e) => {
   Sound.init();
   // névbeírás közben a billentyűk a szövegmezőé (ENTER / ESC befejezi)
+  if (e.target && e.target.id === 'code-input') {   // kódbeírás a (telefonos) szövegmezőben
+    if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); codeSubmit(); }
+    else if (e.code === 'Escape') { e.preventDefault(); e.target.blur(); closeCodeScreen(); }
+    return;
+  }
   if (e.target && e.target.tagName === 'INPUT') {
     if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Escape') {
       e.preventDefault();
@@ -1407,6 +1420,8 @@ function pollInput() {
       tug: KB_DEVICES.some((d) => kbEdge[d].tug) || snaps.some((s) => s.edge.tug),
       reel: KB_DEVICES.some((d) => kbEdge[d].reel) || snaps.some((s) => s.edge.reel)
     };
+    mergeTouch(inp);
+    clearTouchEdges();
     for (const d of KB_DEVICES) { kbEdge[d].tug = false; kbEdge[d].reel = false; }
     const active = Net.mirror && !Net.menuOpen && !Net.voteInfo && game.state === 'playing';
     Net.localIn = active ? inp : { left: false, right: false, up: false, down: false, tug: false, reel: false };
@@ -1451,9 +1466,11 @@ function pollInput() {
       inp.tug = inp.tug || s.edge.tug;
       inp.reel = inp.reel || s.edge.reel;
     }
+    if (solo || dev === 'touch') mergeTouch(inp);   // telefonos (érintéses) irányítás
     p.in = inp;
   }
   for (const d of KB_DEVICES) { kbEdge[d].tug = false; kbEdge[d].reel = false; }
+  clearTouchEdges();
 
   updatePadStatus(snaps.length);
 }
@@ -1502,6 +1519,7 @@ const ui = {
   optionsScreen: $('#options-screen'), volRows: Array.from(document.querySelectorAll('.vol-row')),
   volBtns: document.querySelectorAll('.vol-btn'), btnOptBack: $('#btn-options-back'),
   fsRow: $('#fs-row'), btnFullscreen: $('#btn-fullscreen'),
+  vibRow: $('#vib-row'), btnVibration: $('#btn-vibration'), codeInput: $('#code-input'),
   joinScreen: $('#join-screen'), joinSlots: Array.from(document.querySelectorAll('.join-slot')),
   joinMode: $('#join-mode'), btnJoinPlay: $('#btn-join-play'), btnJoinBack: $('#btn-join-back'),
   pauseTitle: $('#pause-screen .pause-title'), goHint: $('#go-hint'), toast: $('#toast'),
@@ -1511,7 +1529,7 @@ const ui = {
   codeBoxes: Array.from(document.querySelectorAll('.code-box')),
   btnCodeJoin: $('#btn-code-join'), btnCodeBack: $('#btn-code-back'),
   voteBox: $('#vote-box'), voteTitle: $('#vote-title'), voteCount: $('#vote-count'), voteKeys: $('#vote-keys'),
-  kickScreen: $('#kick-screen'), kickList: $('#kick-list')
+  kickScreen: $('#kick-screen'), kickList: $('#kick-list'), voteBtns: $('#vote-btns')
 };
 
 function setText(el, txt) {
@@ -1537,21 +1555,29 @@ function setClass(el, cls) {
 const MENU_ROWS = [
   { key: 'mode', values: ['day', 'night'] },
   { key: 'lang', values: LANGS },
-  { key: 'action', get values() { return isDesktop ? ['start', 'online', 'options', 'exit'] : ['start', 'online', 'options']; } }
+  { key: 'action', get values() {
+    const v = GUEST ? ['online', 'options'] : ['start', 'online', 'options'];
+    return isDesktop ? v.concat('exit') : v;
+  } }
 ];
-const menu = { row: 0, mode: 'day', lang, action: 'start' };
+// Vendég mód: aki a host COPY LINK linkjével (…?guest) jön, csak csatlakozni tud, szobát nyitni nem
+const GUEST = new URLSearchParams(location.search).has('guest');
+document.body.classList.toggle('guest', GUEST);
+const DEFAULT_ACTION = GUEST ? 'online' : 'start';
+
+const menu = { row: 0, mode: 'day', lang, action: DEFAULT_ACTION };
 const ACTION_ROW = 2;   // az alsó gombsor (START / OPTIONS / EXIT) sorszáma
 
 function refreshMenu() {
   ui.menuRows.forEach((r, i) => r.classList.toggle('active', i === menu.row));
   ui.opts.forEach((b) => b.classList.toggle('selected', menu[b.dataset.row] === b.dataset.value));
   ui.actBtns.forEach((b) => b.classList.toggle('selected', menu.row === ACTION_ROW && b.dataset.act === menu.action));
-  ui.menuDesc.textContent = t('desc_' + menu.mode);
+  ui.menuDesc.textContent = GUEST ? t('guest_desc') : t('desc_' + menu.mode);
 }
 
 function menuMove(d) {
   menu.row = (menu.row + d + MENU_ROWS.length) % MENU_ROWS.length;
-  if (menu.row !== ACTION_ROW) menu.action = 'start';
+  if (menu.row !== ACTION_ROW) menu.action = DEFAULT_ACTION;
   refreshMenu();
   Sound.select();
 }
@@ -1574,6 +1600,7 @@ function menuConfirm(device = null) {
   if (menu.row === ACTION_ROW && menu.action === 'options') openOptions('start');
   else if (menu.row === ACTION_ROW && menu.action === 'online') openCodeScreen();
   else if (menu.row === ACTION_ROW && menu.action === 'exit') exitGame();
+  else if (GUEST) openCodeScreen();          // vendég: START helyett mindig a kódbeírás
   else {
     joined = [];
     openJoin(device);
@@ -1681,8 +1708,8 @@ ui.pauseOpts.forEach((b) => {
 // --- OPTIONS: zene és effektek hangereje
 let optionsOpen = false;
 let optionsReturn = 'start';
-let optSel = 0;                    // 0 = zene, 1 = effektek, 2 = teljes képernyő, 3 = vissza
-const OPT_COUNT = 4;
+let optSel = 0;                    // 0 = zene, 1 = effektek, 2 = teljes képernyő, 3 = rezgés, 4 = vissza
+const OPT_COUNT = 5;
 const VOL_KEYS = ['music', 'sfx'];
 
 function openOptions(from) {
@@ -1716,7 +1743,19 @@ function refreshOptions() {
   ui.fsRow.classList.toggle('active', optSel === 2);
   ui.btnFullscreen.textContent = isFullscreen() ? t('opt_on') : t('opt_off');
   ui.btnFullscreen.classList.toggle('selected', isFullscreen());
-  ui.btnOptBack.classList.toggle('selected', optSel === 3);
+  ui.vibRow.classList.toggle('active', optSel === 3);
+  const vibOk = !!navigator.vibrate;
+  ui.btnVibration.textContent = !vibOk ? t('opt_na') : (settings.vibrate ? t('opt_on') : t('opt_off'));
+  ui.btnVibration.classList.toggle('selected', vibOk && settings.vibrate);
+  ui.btnOptBack.classList.toggle('selected', optSel === 4);
+}
+
+function toggleVibration() {
+  settings.vibrate = !settings.vibrate;
+  Store.set('volume', settings);
+  if (settings.vibrate) buzz(60);   // érezd, hogy bekapcsolt
+  refreshOptions();
+  Sound.select();
 }
 
 // --- Teljes képernyő (a böngésző Fullscreen API-jával; F11 is működik)
@@ -1762,12 +1801,14 @@ function changeVolume(key, dir) {
 function optionsAdjust(dir) {
   if (optSel < 2) changeVolume(VOL_KEYS[optSel], dir);
   else if (optSel === 2) toggleFullscreen();
+  else if (optSel === 3) toggleVibration();
 }
 
 // ENTER / A gomb az OPTIONS menüben
 function optionsConfirm() {
   if (optSel === 2) toggleFullscreen();
-  else if (optSel === 3) closeOptions();
+  else if (optSel === 3) toggleVibration();
+  else if (optSel === 4) closeOptions();
 }
 
 function handleOptionsKey(code) {
@@ -1803,6 +1844,12 @@ ui.btnFullscreen.addEventListener('click', (e) => {
   refreshOptions();
 });
 
+ui.btnVibration.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  optSel = 3;
+  toggleVibration();
+});
+
 ui.btnOptBack.addEventListener('click', (e) => {
   e.currentTarget.blur();
   if (optionsOpen) closeOptions();
@@ -1811,7 +1858,7 @@ ui.btnOptBack.addEventListener('click', (e) => {
 ui.btnStart.addEventListener('click', (e) => {
   e.currentTarget.blur();
   Sound.init();
-  if (game.state === 'start' && !optionsOpen) menuConfirm(null);
+  if (game.state === 'start' && !optionsOpen && !GUEST) menuConfirm(touchActive ? 'touch' : null);
 });
 
 ui.btnAgain.addEventListener('click', (e) => {
@@ -2982,6 +3029,7 @@ function updateHUD() {
 
   game.players.forEach((p, i) => updatePanel(ui.panels[i], p));
   updateVoteBox();
+  updateTouchUI();
 }
 
 function updatePanel(pn, p) {
@@ -3264,8 +3312,8 @@ function showMenu() {
   setPlayerCount(1);
   Music.setDuck(1);
   Music.play('menu');
-  menu.row = 0;
-  menu.action = 'start';
+  menu.row = GUEST ? ACTION_ROW : 0;   // vendégnél rögtön a JOIN ONLINE van kijelölve
+  menu.action = DEFAULT_ACTION;
   setupAttract();
 }
 
@@ -3361,6 +3409,7 @@ function editName(dev) {
 
 function deviceLabel(dev) {
   if (dev.startsWith('net:')) return t('dev_net');
+  if (dev === 'touch') return t('dev_touch');
   if (dev === 'kbR') return t('dev_kbR');
   if (dev === 'kbL') return t('dev_kbL');
   return t('dev_pad', { n: Number(dev.slice(3)) + 1 });
@@ -3571,7 +3620,7 @@ const Net = {
 
   /* ---------------- HOST ---------------- */
   host() {
-    if (this.role) return;
+    if (this.role || GUEST) return;
     if (location.protocol === 'file:') { toast(t('online_file')); return; }
     if (!this.available()) { toast(t('online_nolib')); return; }
     this.role = 'host';
@@ -3836,11 +3885,12 @@ function makeRoomCode() {
 
 // A játék címe (a kódot külön kell megadni!)
 function gameLink() {
-  return `${location.origin}${location.pathname}`;
+  return `${location.origin}${location.pathname}?guest`;
 }
 
 function clearJoinParam() {
-  try { history.replaceState(null, '', location.pathname); } catch (e) { /* mindegy */ }
+  // a ?guest jelzés megmarad, minden más paraméter törlődik
+  try { history.replaceState(null, '', location.pathname + (GUEST ? '?guest' : '')); } catch (e) { /* mindegy */ }
 }
 
 // --- Rövid üzenet a játéktér alján
@@ -4302,12 +4352,24 @@ const codeEntry = { chars: [], cursor: 0 };
 function openCodeScreen() {
   codeEntry.chars = Array(NET.CODE_LEN).fill('');
   codeEntry.cursor = 0;
+  ui.codeInput.value = '';
   ui.startScreen.classList.add('hidden');
   ui.codeScreen.classList.remove('hidden');
   setState('code');
   refreshCode();
   Sound.select();
+  if (touchActive) ui.codeInput.focus();   // telefonon rögtön feljön a billentyűzet
 }
+
+// telefonos billentyűzet / beillesztés a láthatatlan mezőbe
+ui.codeInput.addEventListener('input', () => {
+  const clean = ui.codeInput.value.toUpperCase().split('')
+    .filter((c) => NET.CODE_CHARS.includes(c)).slice(0, NET.CODE_LEN).join('');
+  if (ui.codeInput.value !== clean) ui.codeInput.value = clean;
+  codeEntry.chars = Array.from({ length: NET.CODE_LEN }, (_, i) => clean[i] || '');
+  codeEntry.cursor = Math.min(clean.length, NET.CODE_LEN - 1);
+  refreshCode();
+});
 
 function closeCodeScreen() {
   ui.codeScreen.classList.add('hidden');
@@ -4324,6 +4386,7 @@ function refreshCode() {
     b.classList.toggle('cursor', i === codeEntry.cursor);
   });
   ui.btnCodeJoin.disabled = !codeComplete();
+  if (document.activeElement !== ui.codeInput) ui.codeInput.value = codeEntry.chars.join('');
 }
 
 function codeType(ch) {
@@ -4367,6 +4430,7 @@ function codePaste(text) {
 
 function codeSubmit() {
   if (!codeComplete()) return;
+  ui.codeInput.blur();
   ui.codeScreen.classList.add('hidden');
   Net.join(codeEntry.chars.join(''));
 }
@@ -4536,6 +4600,7 @@ function updateVoteBox() {
   setText(ui.voteCount, t('vote_count', { y: info.yes, n: info.no, need: info.need, t: info.time }));
   const iVote = Net.role === 'host' ? true : canClientVote();
   setText(ui.voteKeys, iVote ? t('vote_keys') : t('vote_wait'));
+  ui.voteBtns.classList.toggle('hidden', !iVote);
 }
 
 // Kirúgás-gombok a szoba helyein
@@ -4639,6 +4704,200 @@ function handleKickKey(code) {
 
 
 /* ==========================================================================
+   19/F. ÉRINTÉSES IRÁNYÍTÁS (telefon / tablet) ÉS REZGÉS
+   Bal oldalt "lebegő" joystick (ahol leteszed az ujjad, ott jelenik meg),
+   jobb oldalt REEL (nyomkodni!) és TUG gomb, sarokban szünet gomb.
+   A telefon egy "touch" nevű eszközként lép be, mint egy kontroller.
+   ========================================================================== */
+const TouchCtl = {
+  left: false, right: false, up: false, down: false,
+  tug: false, reel: false,        // lenyomás "élek" (egy képkockára)
+  stickId: null, ox: 0, oy: 0,
+  RADIUS: 50,                     // a joystick kitérése (px)
+  DEADZONE: 0.35
+};
+
+// Érintőképernyős-e a készülék? (egy valódi érintés után mindenképp az lesz)
+let touchActive = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+  (navigator.maxTouchPoints > 0 && !(window.matchMedia && window.matchMedia('(pointer: fine)').matches));
+
+function setTouchActive(on, refit = true) {
+  touchActive = on;
+  document.body.classList.toggle('touch', on);
+  if (refit) scheduleFit();
+}
+setTouchActive(touchActive, false);
+window.addEventListener('touchstart', () => { if (!touchActive) setTouchActive(true); }, { passive: true });
+
+const stickZone = $('#touch-stick-zone');
+const stickBase = $('#stick-base');
+const stickKnob = $('#stick-knob');
+
+// alaphelyzet: halvány joystick a bal alsó részen (hogy lássa, hova kell nyúlni)
+function idleStick() {
+  stickBase.classList.add('idle');
+  stickBase.style.left = '26%';
+  stickBase.style.top = '68%';
+  stickKnob.style.transform = 'translate(0px, 0px)';
+}
+idleStick();
+
+function stickPoint(e) {
+  const r = stickZone.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+stickZone.addEventListener('pointerdown', (e) => {
+  if (TouchCtl.stickId !== null) return;
+  TouchCtl.stickId = e.pointerId;
+  try { stickZone.setPointerCapture(e.pointerId); } catch (err) { /* régi böngésző */ }
+  const p = stickPoint(e);
+  TouchCtl.ox = p.x;
+  TouchCtl.oy = p.y;
+  stickBase.classList.remove('idle');
+  stickBase.style.left = p.x + 'px';
+  stickBase.style.top = p.y + 'px';
+  Sound.init();
+  e.preventDefault();
+});
+
+stickZone.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== TouchCtl.stickId) return;
+  const p = stickPoint(e);
+  let dx = p.x - TouchCtl.ox;
+  let dy = p.y - TouchCtl.oy;
+  const len = Math.hypot(dx, dy);
+  const R = TouchCtl.RADIUS;
+  if (len > R) { dx *= R / len; dy *= R / len; }
+  stickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+  const dz = TouchCtl.DEADZONE * R;
+  TouchCtl.left = dx < -dz;
+  TouchCtl.right = dx > dz;
+  TouchCtl.up = dy < -dz;
+  TouchCtl.down = dy > dz;
+  e.preventDefault();
+});
+
+function releaseStick(e) {
+  if (e.pointerId !== TouchCtl.stickId) return;
+  TouchCtl.stickId = null;
+  TouchCtl.left = TouchCtl.right = TouchCtl.up = TouchCtl.down = false;
+  idleStick();
+}
+stickZone.addEventListener('pointerup', releaseStick);
+stickZone.addEventListener('pointercancel', releaseStick);
+
+function bindTouchButton(el, onPress) {
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    Sound.init();
+    el.classList.add('pressed');
+    onPress();
+  });
+  const up = () => el.classList.remove('pressed');
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerleave', up);
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+bindTouchButton($('#touch-reel'), () => { TouchCtl.reel = true; });
+bindTouchButton($('#touch-tug'), () => { TouchCtl.tug = true; });
+bindTouchButton($('#touch-pause'), () => {
+  if (Net.role === 'client') openClientMenu();
+  else if (game.state === 'playing') pauseGame();
+});
+
+// Az érintés-bemenet hozzáadása egy játékos bemenetéhez
+function mergeTouch(inp) {
+  inp.left = inp.left || TouchCtl.left;
+  inp.right = inp.right || TouchCtl.right;
+  inp.up = inp.up || TouchCtl.up;
+  inp.down = inp.down || TouchCtl.down;
+  inp.tug = inp.tug || TouchCtl.tug;
+  inp.reel = inp.reel || TouchCtl.reel;
+}
+
+function clearTouchEdges() {
+  TouchCtl.tug = false;
+  TouchCtl.reel = false;
+}
+
+// Mikor látszanak a vezérlők? Csak érintőképernyőn, játék közben, ha van érintéses játékos.
+let touchPlayShown = false;
+function updateTouchUI() {
+  const st = game.state;
+  const touchPlayer = Net.role === 'client' ? true
+    : game.players.some((p) => p.device === 'touch') || (game.players.length === 1 && game.players[0].device !== null);
+  const show = touchActive && touchPlayer && (st === 'playing' || st === 'roundclear') &&
+    !optionsOpen && !kickOpen && !Net.menuOpen &&
+    !(Net.role === 'host' && Net.vote) && !(Net.role === 'client' && Net.voteInfo);
+  if (show !== touchPlayShown) {
+    touchPlayShown = show;
+    document.body.classList.toggle('touch-play', show);
+    if (!show) releaseStick({ pointerId: TouchCtl.stickId });
+    scheduleFit();
+  }
+}
+
+// --- Rezgés: a telefonos játékos saját eseményeinél
+const hap = { state: null, over: false };
+
+function buzz(pattern) {
+  if (!settings.vibrate || !navigator.vibrate) return;
+  try { navigator.vibrate(pattern); } catch (e) { /* nem támogatott */ }
+}
+
+function hapticPlayer() {
+  if (!touchActive) return null;
+  if (Net.role === 'client') return game.players[Net.ownIdx] || null;
+  return game.players.find((p) => p.device === 'touch') || (game.players.length === 1 ? game.players[0] : null);
+}
+
+// Képkockánként: a horog állapotának változásaiból rezgés
+function checkHaptics() {
+  const active = game.state === 'playing' || game.state === 'roundclear';
+  const p = active ? hapticPlayer() : null;
+  if (!p) { hap.state = null; hap.over = false; return; }
+  const st = p.hook.state;
+  const over = p.hook.overload > 0;
+  if (hap.state && st !== hap.state) {
+    if (hap.state === 'free' && st === 'fight') buzz(45);                 // kapás
+    else if (hap.state === 'fight' && st === 'free') buzz([35, 50, 35]);  // kifogva
+    else if (hap.state === 'fight' && st === 'reset') buzz(220);          // elszakadt / megette a cápa
+  }
+  if (over && !hap.over) buzz(25);                                        // piros zóna
+  hap.state = st;
+  hap.over = over;
+}
+
+// Szavazás gombokkal (telefonon és egérrel is)
+function voteButton(yes) {
+  if (Net.role === 'client') {
+    if (canClientVote()) Net.sendVote(yes);
+    return;
+  }
+  const v = Net.vote;
+  if (Net.role !== 'host' || !v) return;
+  const free = (d) => !v.yes.includes(d) && !v.no.includes(d);
+  const pick = v.voters.find((d) => d === 'touch' && free(d)) ||
+    v.voters.find((d) => !d.startsWith('net:') && free(d));
+  if (pick) castVote(pick, yes);
+}
+$('#vote-yes').addEventListener('click', (e) => { e.currentTarget.blur(); voteButton(true); });
+$('#vote-no').addEventListener('click', (e) => { e.currentTarget.blur(); voteButton(false); });
+
+// Csatlakozó képernyő: telefonon egy üres helyre bökve belép a "touch" játékos
+ui.joinSlots.forEach((slot, i) => {
+  slot.addEventListener('click', (e) => {
+    if (game.state !== 'join' || Net.role === 'client' || !touchActive) return;
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON')) return;
+    if (!joined[i] && !joined.includes('touch')) joinDevice('touch');
+  });
+});
+
+
+/* ==========================================================================
    19/B. ELRENDEZÉS – a játék mindig teljesen beférjen az ablakba
    A pontsáv, a panelek és a súgósor tényleges magasságát lemérjük, és a
    játékteret (4:3, torzítás nélkül) akkorára méretezzük, amekkora még kifér.
@@ -4648,7 +4907,9 @@ const LAYOUT = {
   MARGIN: 20,           // a lap szélein hagyott hely (px)
   SIDE_MIN: 170,        // az oldalsó panelek szélessége (min / max)
   SIDE_MAX: 270,
-  SIDE_MIN_HEIGHT: 400  // ennél alacsonyabb játéktérnél a panelek alulra kerülnek
+  SIDE_MIN_HEIGHT: 400, // ennél alacsonyabb játéktérnél a panelek alulra kerülnek
+  TOUCH_SIDE_MIN: 110,  // telefonon keskenyebb oldalsó panelek is elegek
+  TOUCH_SIDE_MIN_HEIGHT: 200
 };
 
 let fitPending = false;
@@ -4666,11 +4927,17 @@ function fitLayout() {
   const borderW = scr.offsetWidth - canvas.offsetWidth;          // a játéktér kerete
   const borderH = scr.offsetHeight - canvas.offsetHeight;
   const helpH = help && help.offsetParent ? help.offsetHeight + 6 : 0;
-  const availH = ih - LAYOUT.MARGIN - hud.offsetHeight - 6 - helpH;
+  // telefonon: fekve a vezérlők a játéktér felett vannak, állva alatta egy külön sávban
+  document.body.classList.toggle('touch-landscape', iw > ih);
+  const touchBar = document.getElementById('touch-ui');
+  const touchH = touchBar && touchBar.offsetParent && iw <= ih ? touchBar.offsetHeight + 6 : 0;
+  const availH = ih - LAYOUT.MARGIN - hud.offsetHeight - 6 - helpH - touchH;
+  const sideMin = touchActive ? LAYOUT.TOUCH_SIDE_MIN : LAYOUT.SIDE_MIN;
+  const sideMinH = touchActive ? LAYOUT.TOUCH_SIDE_MIN_HEIGHT : LAYOUT.SIDE_MIN_HEIGHT;
   const cap = isFullscreen() ? Infinity : LAYOUT.MAX_WIDTH;
 
   // 1) panelek OLDALT: a játéktér magasságát csak az ablak magassága korlátozza
-  const sideW = Math.round(clamp(iw * 0.14, LAYOUT.SIDE_MIN, LAYOUT.SIDE_MAX));
+  const sideW = Math.round(clamp(iw * 0.14, sideMin, LAYOUT.SIDE_MAX));
   const sideCanvasW = Math.min(cap, (availH - borderH) * 4 / 3, iw * 0.98 - 2 * (sideW + GAP) - borderW);
 
   // 2) panelek ALUL: lemérjük, mennyi helyet foglal a panelsor
@@ -4683,7 +4950,7 @@ function fitLayout() {
   }
 
   // amelyik nagyobb játékteret ad, az nyer (a 4:3 arány mindig marad)
-  const useSide = sideCanvasW >= bottomCanvasW && sideCanvasW * 0.75 >= LAYOUT.SIDE_MIN_HEIGHT;
+  const useSide = sideCanvasW >= bottomCanvasW && sideCanvasW * 0.75 >= sideMinH;
   if (useSide) {
     const w = Math.floor(Math.max(300, sideCanvasW));
     document.body.classList.add('side-panels');
@@ -4767,12 +5034,14 @@ function frame(now) {
   pollInput();
   update(dt);
   Net.tick(dt);
+  checkHaptics();
   render();
   updateHUD();
   requestAnimationFrame(frame);
 }
 
 Music.init();
+if (GUEST) menu.row = ACTION_ROW;   // vendég: a JOIN ONLINE gomb van kijelölve
 setupAttract();
 applyI18n();
 initLayout();
