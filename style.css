@@ -460,3 +460,46 @@ body.in-game .help { display: none; }
 
 /* a panelen és a HUD-on a név a játékos színében */
 .panel .tag { max-width: 12ch; overflow: hidden; white-space: nowrap; }
+
+/* ---------- v10: online multiplayer ---------- */
+body.net-client .host-only { display: none !important; }
+
+.online-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.host-btn { background: #1f3a2a; border-color: var(--lime); }
+.online-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.online-code { color: var(--lime); font-size: 1.2em; }
+.online-link {
+  width: 26em;
+  max-width: 60vw;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 0.8em;
+  padding: 3px 6px;
+  background: #000;
+  color: var(--text);
+  border: 2px solid var(--border);
+}
+.online-status { color: var(--lime); min-height: 1.2em; }
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 0.5em 1.2em;
+  background: #0d1424;
+  border: 3px solid var(--amber);
+  box-shadow: 4px 4px 0 #000;
+  color: var(--amber);
+  line-height: 1.3;
+  font-size: clamp(10px, 1.5vw, 15px);
+  text-align: center;
+}

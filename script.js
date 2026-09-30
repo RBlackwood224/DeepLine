@@ -28,6 +28,8 @@
      - akár 4 játékos egy gépen (billentyűzet-oldalak + kontrollerek), saját színnel
    v9:
      - játékosnevek: beírható, vagy vicces véletlen név; mentve eszközönként
+   v10:
+     - ONLINE MULTIPLAYER: a host meghívó linket küld, a barátok böngészőből csatlakoznak (max. 4 fő)
      - OPTIONS menü: külön zene- és effekt-hangerő (mentve)
      - nyelvek: English (alap) / Français
 
@@ -203,6 +205,18 @@ const I18N = {
     join_keys: `KEYBOARD: SPACE (ARROWS) OR F (WASD)${GAP}CONTROLLER: A`,
     join_start: `ENTER / START: PLAY${GAP}PAD B: LEAVE${GAP}ESC: BACK`,
     join_names: `SPACE / F AGAIN: TYPE YOUR NAME${GAP}PAD Y: RANDOM NAME`,
+    btn_host: "INVITE FRIENDS ONLINE", btn_copy: "COPY LINK", copied: "LINK COPIED!",
+    online_code: "ROOM {code}", online_starting: "CREATING ROOM...",
+    online_wait: "SEND THE LINK TO YOUR FRIENDS - ONLINE: {n}",
+    online_nolib: "ONLINE IS UNAVAILABLE (NO INTERNET?)",
+    online_file: "ONLINE ONLY WORKS IN THE WEB VERSION (GITHUB PAGES)",
+    online_err: "ONLINE ERROR: {e}", dev_net: "ONLINE PLAYER", net_you: "YOU - ONLINE", net_empty: "FREE SLOT",
+    net_connecting: "CONNECTING TO THE HOST...", net_waiting: "WAITING FOR THE HOST TO START",
+    net_full: "THE ROOM IS FULL", net_busy: "THE GAME HAS ALREADY STARTED", net_notfound: "ROOM NOT FOUND",
+    net_hostleft: "THE HOST LEFT THE GAME", net_joined: "{name} JOINED", net_left: "{name} LEFT",
+    host_paused: "HOST PAUSED", menu_title: "MENU",
+    go_client_hint: `WAITING FOR THE HOST...${GAP}ESC / PAD B: LEAVE`,
+    join_online: `I / PAD X: INVITE FRIENDS ONLINE`,
     dev_kbR: "KEYBOARD - ARROWS", dev_kbL: "KEYBOARD - WASD", dev_pad: "CONTROLLER {n}",
     ctrl_p1: `ARROWS${GAP}SPACE TUG${GAP}ENTER REEL`,
     ctrl_p2: `WASD${GAP}F TUG${GAP}G REEL`,
@@ -263,6 +277,18 @@ const I18N = {
     join_keys: `CLAVIER : ESPACE (FLÈCHES) OU F (ZQSD)${GAP}MANETTE : A`,
     join_start: `ENTRÉE / START : JOUER${GAP}MANETTE B : QUITTER${GAP}ÉCHAP : RETOUR`,
     join_names: `ESPACE / F ENCORE : TON NOM${GAP}MANETTE Y : NOM AU HASARD`,
+    btn_host: "INVITER DES AMIS EN LIGNE", btn_copy: "COPIER LE LIEN", copied: "LIEN COPIÉ !",
+    online_code: "SALON {code}", online_starting: "CRÉATION DU SALON...",
+    online_wait: "ENVOIE LE LIEN À TES AMIS - EN LIGNE : {n}",
+    online_nolib: "EN LIGNE INDISPONIBLE (PAS D'INTERNET ?)",
+    online_file: "LE JEU EN LIGNE MARCHE SUR LA VERSION WEB (GITHUB PAGES)",
+    online_err: "ERREUR EN LIGNE : {e}", dev_net: "JOUEUR EN LIGNE", net_you: "TOI - EN LIGNE", net_empty: "PLACE LIBRE",
+    net_connecting: "CONNEXION À L'HÔTE...", net_waiting: "EN ATTENTE DE L'HÔTE",
+    net_full: "LE SALON EST COMPLET", net_busy: "LA PARTIE A DÉJÀ COMMENCÉ", net_notfound: "SALON INTROUVABLE",
+    net_hostleft: "L'HÔTE A QUITTÉ LA PARTIE", net_joined: "{name} EST LÀ", net_left: "{name} EST PARTI",
+    host_paused: "PAUSE DE L'HÔTE", menu_title: "MENU",
+    go_client_hint: `EN ATTENTE DE L'HÔTE...${GAP}ÉCHAP / MANETTE B : QUITTER`,
+    join_online: `I / MANETTE X : INVITER EN LIGNE`,
     dev_kbR: "CLAVIER - FLÈCHES", dev_kbL: "CLAVIER - ZQSD", dev_pad: "MANETTE {n}",
     ctrl_p1: `FLÈCHES${GAP}ESPACE FERRER${GAP}ENTRÉE MOULINER`,
     ctrl_p2: `ZQSD${GAP}F FERRER${GAP}G MOULINER`,
@@ -885,6 +911,7 @@ const Sound = {
   },
 
   tone(freq, dur, opts = {}) {
+    if (Net.role === 'host') Net.event(['tn', freq, dur, opts]);   // online vendégek is hallják
     if (!this.ac || this.muted) return;
     const { type = 'square', slide = null, delay = 0 } = opts;
     const vol = (opts.vol || 0.04) * settings.sfx;
@@ -1074,7 +1101,8 @@ const game = {
   oldOneActive: false,
   shake: 0,
   lastTick: -1,
-  timeFlash: 0           // a HUD idő zölden villan bónusznál
+  timeFlash: 0,          // a HUD idő zölden villan bónusznál
+  fishSeq: 0             // halak egyedi azonosítója (az online módhoz)
 };
 
 const effects = { particles: [], bubbles: [], popups: [], banners: [] };
@@ -1162,11 +1190,11 @@ window.addEventListener('keyup', (e) => {
 
 window.addEventListener('blur', () => {
   for (const k in keys) keys[k] = false;
-  if (game.state === 'playing') pauseGame();
+  if (game.state === 'playing' && !(Net.role === 'host' && Net.remoteCount())) pauseGame();
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && game.state === 'playing') pauseGame();
+  if (document.hidden && game.state === 'playing' && !(Net.role === 'host' && Net.remoteCount())) pauseGame();
 });
 
 // Melyik billentyűzet-oldalhoz tartozik egy akció-gomb?
@@ -1187,6 +1215,10 @@ function joinKeyDevice(code) {
 function onKeyPress(code) {
   if (optionsOpen) {
     handleOptionsKey(code);
+    return;
+  }
+  if (Net.role === 'client') {
+    clientKey(code);
     return;
   }
   switch (game.state) {
@@ -1221,6 +1253,8 @@ function onKeyPress(code) {
         else joinDevice('kbR');
       } else if (code === 'Escape' || code === 'Backspace') {
         joinEscape();
+      } else if (code === 'KeyI') {
+        Net.host();
       } else {
         const dev = joinKeyDevice(code);
         if (dev && joined.includes(dev)) editName(dev);   // újra megnyomva: név beírása
@@ -1257,6 +1291,7 @@ function padSnapshot(pad) {
     tug: b(1) || b(2) || b(5),   // B, X vagy RB: rántás
     cancel: b(1),                // B: kilépés a csatlakozó képernyőn
     reroll: b(3),                // Y: új véletlen név a csatlakozó képernyőn
+    x: b(2),                     // X: online szoba nyitása a csatlakozó képernyőn
     start: b(9),
     back: b(8)
   };
@@ -1283,6 +1318,10 @@ function pollInput() {
       else if (e.tug || e.start || e.back) closeOptions();
       continue;
     }
+    if (Net.role === 'client') {
+      clientPad(s);
+      continue;
+    }
     if (game.state === 'start') {
       if (e.up) menuMove(-1);
       if (e.down) menuMove(1);
@@ -1302,6 +1341,7 @@ function pollInput() {
       if (!isIn && (e.reel || e.start)) joinDevice(s.device);
       else if (isIn && e.start) startGame();
       else if (isIn && e.reroll) rerollName(s.device);
+      else if (e.x && !Net.role) Net.host();
       else if (isIn && (e.cancel || e.back)) leaveDevice(s.device);
       else if (!isIn && (e.cancel || e.back) && joined.length === 0) showMenu();
     } else if (game.state === 'gameover' && game.stateTime > 1.2) {
@@ -1310,12 +1350,34 @@ function pollInput() {
     }
   }
 
+  // Online vendég: minden helyi eszköz együtt irányít, és a hostnak küldjük
+  if (Net.role === 'client') {
+    const held = (a) => KEYMAP.some((m) => m[a].some((c) => keys[c])) || snaps.some((s) => s.held[a]);
+    const inp = {
+      left: held('left'), right: held('right'), up: held('up'), down: held('down'),
+      tug: KB_DEVICES.some((d) => kbEdge[d].tug) || snaps.some((s) => s.edge.tug),
+      reel: KB_DEVICES.some((d) => kbEdge[d].reel) || snaps.some((s) => s.edge.reel)
+    };
+    for (const d of KB_DEVICES) { kbEdge[d].tug = false; kbEdge[d].reel = false; }
+    if (Net.mirror && !Net.menuOpen && game.state === 'playing') Net.sendInput(inp);
+    updatePadStatus(snaps.length);
+    return;
+  }
+
   // Játékosok bemenete: mindenki a saját eszközéről (egyedül bármelyikről)
   const n = game.players.length;
   const solo = n === 1;
   for (let i = 0; i < n; i++) {
     const p = game.players[i];
     const dev = p.device || 'kbR';
+    // online játékos: a hálózaton érkezett bemenet
+    if (dev.startsWith('net:')) {
+      const r = Net.inputs[dev] || {};
+      p.in = { left: !!r.l, right: !!r.r, up: !!r.u, down: !!r.d, tug: r.tg > 0, reel: r.rl > 0 };
+      if (r.tg > 0) r.tg--;
+      if (r.rl > 0) r.rl--;
+      continue;
+    }
     const kbs = solo ? KB_DEVICES : KB_DEVICES.filter((d) => d === dev);
     const maps = kbs.map((d) => KEYMAP[KB_DEVICES.indexOf(d)]);
     const held = (action) => maps.some((m) => m[action].some((c) => keys[c]));
@@ -1384,7 +1446,10 @@ const ui = {
   volBtns: document.querySelectorAll('.vol-btn'), btnOptBack: $('#btn-options-back'),
   fsRow: $('#fs-row'), btnFullscreen: $('#btn-fullscreen'),
   joinScreen: $('#join-screen'), joinSlots: Array.from(document.querySelectorAll('.join-slot')),
-  joinMode: $('#join-mode'), btnJoinPlay: $('#btn-join-play'), btnJoinBack: $('#btn-join-back')
+  joinMode: $('#join-mode'), btnJoinPlay: $('#btn-join-play'), btnJoinBack: $('#btn-join-back'),
+  pauseTitle: $('#pause-screen .pause-title'), goHint: $('#go-hint'), toast: $('#toast'),
+  btnHost: $('#btn-host'), onlineInfo: $('#online-info'), onlineCode: $('#online-code'),
+  onlineLink: $('#online-link'), btnCopy: $('#btn-copy'), onlineStatus: $('#online-status')
 };
 
 function setText(el, txt) {
@@ -1503,7 +1568,8 @@ ui.btnExit.addEventListener('click', (e) => {
 let pauseSel = 0;
 
 function pauseOptions() {
-  return ui.pauseOpts.filter((b) => isDesktop || !b.classList.contains('desktop-only'));
+  return ui.pauseOpts.filter((b) => (isDesktop || !b.classList.contains('desktop-only'))
+    && !(Net.role === 'client' && b.classList.contains('host-only')));
 }
 
 function refreshPause() {
@@ -1523,6 +1589,13 @@ function pauseSelect() {
 }
 
 function doPauseAction(action) {
+  if (Net.role === 'client') {
+    if (action === 'resume') closeClientMenu();
+    else if (action === 'options') openOptions('pause');
+    else if (action === 'menu') Net.leave();
+    else if (action === 'exit') exitGame();
+    return;
+  }
   if (action === 'resume') resumeGame();
   else if (action === 'restart') startGame();
   else if (action === 'options') openOptions('pause');
@@ -1533,7 +1606,7 @@ function doPauseAction(action) {
 ui.pauseOpts.forEach((b) => {
   b.addEventListener('click', (e) => {
     e.currentTarget.blur();
-    if (game.state === 'paused' && !optionsOpen) doPauseAction(b.dataset.action);
+    if ((game.state === 'paused' || Net.menuOpen) && !optionsOpen) doPauseAction(b.dataset.action);
   });
 });
 
@@ -1560,7 +1633,7 @@ function closeOptions() {
   Store.set('volume', settings);
   ui.optionsScreen.classList.add('hidden');
   if (optionsReturn === 'start' && game.state === 'start') ui.startScreen.classList.remove('hidden');
-  else if (game.state === 'paused') ui.pauseScreen.classList.remove('hidden');
+  else if (game.state === 'paused' || Net.menuOpen) ui.pauseScreen.classList.remove('hidden');
   Sound.select();
 }
 
@@ -1835,6 +1908,7 @@ function spawnFish(onScreen = false, forcedKey = null) {
   const m = sp.motion;
 
   const f = {
+    id: ++game.fishSeq,
     key, sp,
     w: spr.width, h: spr.height,
     x, y, baseY: y, targetY: y, dir,
@@ -2472,6 +2546,7 @@ function addParticle(x, y, vx, vy, life, color, gravity = 0) {
 }
 
 function splash(x, y, n, color) {
+  if (Net.role === 'host') Net.event(['sp', Math.round(x), Math.round(y), n, color]);
   for (let i = 0; i < n; i++) {
     addParticle(x + rand(-3, 3), y, rand(-35, 35), rand(-80, -30), rand(0.4, 0.9), color, 170);
   }
@@ -2482,10 +2557,12 @@ function makeBubble(x, y) {
 }
 
 function addPopup(text, x, y, color, scale = 1, life = 1.4) {
+  if (Net.role === 'host') Net.event(['pp', text, Math.round(x), Math.round(y), color, scale, life]);
   effects.popups.push({ text, x, y, color, scale, life });
 }
 
 function addBanner(text, life, color, flash) {
+  if (Net.role === 'host') Net.event(['bn', text, life, color, flash]);
   effects.banners.push({ text, life, color, flash });
   if (effects.banners.length > 4) effects.banners.shift();
 }
@@ -2795,6 +2872,12 @@ function render() {
   drawEventIndicator();
   ctx.restore();
 
+  if (Net.role === 'client' && Net.mirror && game.state === 'paused') {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    drawText(ctx, t('host_paused'), W / 2, H / 2 - 6, 2, '#ffc933', 'center');
+  }
+
 }
 
 
@@ -2962,16 +3045,17 @@ function roundClear(winner) {
 }
 
 function pauseGame() {
-  if (game.state !== 'playing') return;
+  if (game.state !== 'playing' || Net.role === 'client') return;
   setState('paused');
   pauseSel = 0;
+  ui.pauseTitle.textContent = t('pause_title');
   refreshPause();
   ui.pauseScreen.classList.remove('hidden');
   Music.setDuck(0.4);
 }
 
 function resumeGame() {
-  if (game.state !== 'paused') return;
+  if (game.state !== 'paused' || Net.role === 'client') return;
   ui.pauseScreen.classList.add('hidden');
   setState('playing');
   Music.setDuck(1);
@@ -2980,7 +3064,7 @@ function resumeGame() {
 function toggleMute() {
   Sound.muted = !Sound.muted;
   Music.applyVolume();
-  addPopup(Sound.muted ? t('pop_sound_off') : t('pop_sound_on'), W / 2, 70, '#dfe8f5', 1, 1);
+  effects.popups.push({ text: Sound.muted ? t('pop_sound_off') : t('pop_sound_on'), x: W / 2, y: 70, color: '#dfe8f5', scale: 1, life: 1 });
 }
 
 function updateTimer(dt) {
@@ -3015,7 +3099,12 @@ function endGame() {
   if (game.predator) predatorLeave(game.predator);
   game.event = null;
   setState('gameover');
+  if (Net.role === 'host') Net.sendGameOver();
+  showGameOverScreen();
+}
 
+// A Game Over képernyő kitöltése (a hostnál és az online vendégnél is)
+function showGameOverScreen() {
   const ps = game.players;
   const two = game.numPlayers > 1;   // több játékos (versus)
 
@@ -3054,8 +3143,10 @@ function endGame() {
   }
   ui.goStats.innerHTML = html;
 
+  ui.goHint.textContent = Net.role === 'client' ? t('go_client_hint') : t('go_hint');
+
   // Rekord (csak 1 játékosnál), elmentve
-  if (!two) {
+  if (!two && Net.role !== 'client') {
     const p = ps[0];
     if (p.score > bestScores[game.mode]) {
       bestScores[game.mode] = p.score;
@@ -3077,6 +3168,8 @@ function endGame() {
 }
 
 function showMenu() {
+  if (Net.role === 'client') { Net.leave(); return; }   // a leave() maga hívja újra a showMenu-t
+  if (Net.role === 'host') Net.stop();
   setState('start');
   joined = [];
   ui.gameoverScreen.classList.add('hidden');
@@ -3151,6 +3244,7 @@ function cleanName(str) {
 }
 
 function nameOf(dev) {
+  if (dev.startsWith('net:')) return Net.names[dev] || '?';
   if (!playerNames[dev]) {
     playerNames[dev] = randomName();
     Store.set('names', playerNames);
@@ -3165,12 +3259,14 @@ function setName(dev, name) {
 }
 
 function rerollName(dev) {
+  if (dev.startsWith('net:')) return;
   setName(dev, randomName());
   Sound.select();
 }
 
 // A játékos névmezőjének kijelölése (billentyűzeten gépelhető)
 function editName(dev) {
+  if (dev.startsWith('net:')) return;
   const i = joined.indexOf(dev);
   const input = ui.joinSlots[i] && ui.joinSlots[i].querySelector('.slot-name');
   if (!input) return;
@@ -3179,6 +3275,7 @@ function editName(dev) {
 }
 
 function deviceLabel(dev) {
+  if (dev.startsWith('net:')) return t('dev_net');
   if (dev === 'kbR') return t('dev_kbR');
   if (dev === 'kbL') return t('dev_kbL');
   return t('dev_pad', { n: Number(dev.slice(3)) + 1 });
@@ -3255,7 +3352,13 @@ function refreshJoin() {
     slot.classList.toggle('filled', !!dev);
     slot.querySelector('.slot-text').textContent = dev ? deviceLabel(dev) : t('join_empty');
     const input = slot.querySelector('.slot-name');
-    if (input && document.activeElement !== input) input.value = dev ? nameOf(dev) : '';
+    const isNet = !!dev && dev.startsWith('net:');
+    if (input) {
+      input.readOnly = isNet;   // az online játékos nevét ő maga írja
+      if (document.activeElement !== input) input.value = dev ? nameOf(dev) : '';
+    }
+    const dice = slot.querySelector('.slot-dice');
+    if (dice) dice.style.visibility = dev && !isNet ? 'visible' : 'hidden';
     drawSlotPreview(slot.querySelector('.slot-preview'), i, !!dev);
   });
   ui.joinMode.textContent = joined.length === 0 ? '' : (joined.length === 1 ? t('join_solo') : t('join_versus', { n: joined.length }));
@@ -3269,6 +3372,8 @@ function refreshJoin() {
   if (!same) game.players = joined.length ? joined.map((d, i) => makePlayer(i, n, d)) : [makePlayer(0, 1)];
   game.players.forEach((p, i) => { p.name = joined[i] ? nameOf(joined[i]) : ''; });
   scheduleFit();
+  if (Net.role === 'host') Net.sendLobby();
+  refreshOnlineBox();
 }
 
 // Névmezők és kocka-gombok a csatlakozó helyeken
@@ -3278,16 +3383,21 @@ ui.joinSlots.forEach((slot, i) => {
   if (input) {
     input.maxLength = CONFIG.MAX_NAME_LEN;
     input.addEventListener('input', () => {
-      const dev = joined[i];
-      if (!dev) return;
       const clean = cleanName(input.value);
       if (input.value !== clean) input.value = clean;
+      if (Net.role === 'client') return;
+      const dev = joined[i];
+      if (!dev || dev.startsWith('net:')) return;
       playerNames[dev] = clean;
       game.players.forEach((p, k) => { if (joined[k]) p.name = nameOf(joined[k]); });
     });
     input.addEventListener('blur', () => {
+      if (Net.role === 'client') {
+        if (!input.readOnly) setOwnName(cleanName(input.value).trim() || randomName());
+        return;
+      }
       const dev = joined[i];
-      if (!dev) return;
+      if (!dev || dev.startsWith('net:')) return;
       const clean = cleanName(input.value).trim();
       setName(dev, clean || randomName());   // üresen hagyva véletlen nevet kap
     });
@@ -3295,7 +3405,8 @@ ui.joinSlots.forEach((slot, i) => {
   if (dice) {
     dice.addEventListener('click', (e) => {
       e.currentTarget.blur();
-      if (joined[i]) rerollName(joined[i]);
+      if (Net.role === 'client') rerollOwnName();
+      else if (joined[i]) rerollName(joined[i]);
     });
   }
 });
@@ -3310,6 +3421,680 @@ ui.btnJoinBack.addEventListener('click', (e) => {
   e.currentTarget.blur();
   if (game.state === 'join') showMenu();
 });
+
+
+/* ==========================================================================
+   19/C. ONLINE MULTIPLAYER (PeerJS / WebRTC)
+   A host böngészője futtatja a játékot. A vendégek csak a gombnyomásaikat
+   küldik, és a hosttól kapott állapotot rajzolják ki (másodpercenként 20x).
+   A kapcsolat közvetlenül a gépek között megy; a PeerJS ingyenes szervere
+   csak az első összekötésben segít.
+   ========================================================================== */
+const NET = {
+  SNAPSHOT_INTERVAL: 0.05,          // a host ennyi mp-enként küld állapotot
+  INPUT_INTERVAL: 0.033,            // a vendég legfeljebb ennyi mp-enként küld bemenetet
+  PEER_PREFIX: 'deepline-rtfish-',  // a szobák azonosítójának előtagja
+  CODE_CHARS: 'ABCDEFGHJKMNPQRSTUVWXYZ23456789',
+  CODE_LEN: 5
+};
+const SPECIES_KEYS = Object.keys(SPECIES);
+const HOOK_STATES = ['free', 'fight', 'reset'];
+
+const Net = {
+  role: null,           // null | 'host' | 'client'
+  peer: null,
+  code: '',
+  // host
+  conns: {},            // dev -> kapcsolat
+  names: {},            // dev -> online játékos neve
+  inputs: {},           // dev -> { l, r, u, d, tg, rl }
+  events: [],           // a következő állapotcsomaggal küldendő események
+  sendTimer: 0,
+  // vendég
+  conn: null,
+  youDev: null,
+  lobby: [],
+  mirror: false,        // a host állapotát tükrözzük
+  fishMap: new Map(),
+  menuOpen: false,
+  pendingIn: { tg: 0, rl: 0 },
+  lastIn: '',
+  inTimer: 0,
+
+  available() {
+    return typeof window.Peer === 'function';
+  },
+
+  remoteCount() {
+    return Object.keys(this.conns).length;
+  },
+
+  /* ---------------- HOST ---------------- */
+  host() {
+    if (this.role) return;
+    if (location.protocol === 'file:') { toast(t('online_file')); return; }
+    if (!this.available()) { toast(t('online_nolib')); return; }
+    this.role = 'host';
+    this.code = makeRoomCode();
+    this.peer = new window.Peer(NET.PEER_PREFIX + this.code);
+    this.peer.on('open', () => refreshOnlineBox());
+    this.peer.on('connection', (conn) => this.onHostConnection(conn));
+    this.peer.on('disconnected', () => {
+      if (this.peer && !this.peer.destroyed) {
+        try { this.peer.reconnect(); } catch (e) { /* a meglévő kapcsolatok ettől még élnek */ }
+      }
+    });
+    this.peer.on('error', (err) => {
+      if (err && err.type === 'unavailable-id') {   // foglalt kód: új kóddal próbáljuk
+        this.stop(true);
+        this.host();
+        return;
+      }
+      setOnlineStatus(t('online_err', { e: String((err && err.type) || err).toUpperCase() }));
+    });
+    refreshOnlineBox();
+    Sound.select();
+  },
+
+  onHostConnection(conn) {
+    const dev = 'net:' + conn.peer;
+    conn.on('data', (msg) => this.onHostData(dev, conn, msg));
+    conn.on('close', () => this.onHostClose(dev));
+    conn.on('error', () => this.onHostClose(dev));
+  },
+
+  onHostData(dev, conn, msg) {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.t === 'hello') {
+      if (game.state !== 'join') { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 400); return; }
+      if (joined.length >= CONFIG.MAX_LOCAL_PLAYERS) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 400); return; }
+      this.conns[dev] = conn;
+      this.names[dev] = cleanName(msg.name || '').trim() || randomName();
+      this.inputs[dev] = { l: 0, r: 0, u: 0, d: 0, tg: 0, rl: 0 };
+      joinDevice(dev);
+      addBanner(t('net_joined', { name: this.names[dev] }), 1.6, '#6cf06c', false);
+    } else if (msg.t === 'name') {
+      if (!this.conns[dev]) return;
+      this.names[dev] = cleanName(msg.name || '').trim() || this.names[dev];
+      if (game.state === 'join') refreshJoin();
+    } else if (msg.t === 'in') {
+      const r = this.inputs[dev];
+      if (!r) return;
+      r.l = msg.l; r.r = msg.r; r.u = msg.u; r.d = msg.d;
+      r.tg = Math.min(6, r.tg + (msg.tg || 0));
+      r.rl = Math.min(12, r.rl + (msg.rl || 0));
+    }
+  },
+
+  onHostClose(dev) {
+    if (!this.conns[dev]) return;
+    delete this.conns[dev];
+    if (this.inputs[dev]) this.inputs[dev] = { l: 0, r: 0, u: 0, d: 0, tg: 0, rl: 0 };
+    addBanner(t('net_left', { name: this.names[dev] || '?' }), 1.8, '#ff9a4a', false);
+    if (game.state === 'join') leaveDevice(dev);
+    refreshOnlineBox();
+  },
+
+  broadcast(msg) {
+    for (const c of Object.values(this.conns)) {
+      try { if (c.open) c.send(msg); } catch (e) { /* bontott kapcsolat */ }
+    }
+  },
+
+  sendLobby() {
+    if (this.role !== 'host') return;
+    const slots = joined.map((d) => ({ name: nameOf(d), label: deviceLabel(d), dev: d }));
+    this.broadcast({ t: 'lobby', slots });
+    refreshOnlineBox();
+  },
+
+  // A host eseményei (hang, felirat, csobbanás) – a vendégeknél is lejátszódnak
+  event(ev) {
+    if (this.role === 'host' && this.remoteCount()) this.events.push(ev);
+  },
+
+  sendGameOver() {
+    this.broadcast({
+      t: 'go', level: game.level, mode: game.mode,
+      players: game.players.map((p) => ({
+        name: p.name, score: p.score, caught: p.caught, biggest: p.biggest, rarest: p.rarest,
+        eaten: p.eaten, roundWins: p.roundWins, log: p.log
+      }))
+    });
+  },
+
+  tick(dt) {
+    if (this.role === 'host') {
+      if (!this.remoteCount()) { this.events.length = 0; return; }
+      this.sendTimer -= dt;
+      if (this.sendTimer > 0) return;
+      this.sendTimer = NET.SNAPSHOT_INTERVAL;
+      const st = game.state;
+      if (st === 'playing' || st === 'paused' || st === 'roundclear' || st === 'gameover') {
+        this.broadcast(makeSnapshot(this.events));
+      }
+      this.events = [];
+    } else if (this.role === 'client') {
+      this.inTimer -= dt;
+    }
+  },
+
+  // A szoba bezárása (a vendégek értesítést kapnak)
+  stop(silent = false) {
+    if (this.role !== 'host') return;
+    this.broadcast({ t: 'bye' });
+    const peer = this.peer;
+    const conns = Object.values(this.conns);
+    setTimeout(() => {
+      for (const c of conns) { try { c.close(); } catch (e) { /* mindegy */ } }
+      try { if (peer) peer.destroy(); } catch (e) { /* mindegy */ }
+    }, 250);
+    this.role = null;
+    this.peer = null;
+    this.conns = {};
+    this.inputs = {};
+    this.events = [];
+    joined = joined.filter((d) => !d.startsWith('net:'));
+    if (!silent) refreshOnlineBox();
+  },
+
+  /* ---------------- VENDÉG ---------------- */
+  join(code) {
+    if (!this.available()) { toast(t('online_nolib')); clearJoinParam(); return; }
+    this.role = 'client';
+    this.code = String(code).toUpperCase();
+    document.body.classList.add('net-client');
+    enterClientLobby([]);
+    ui.joinMode.textContent = t('net_connecting');
+    this.peer = new window.Peer();
+    this.peer.on('open', (id) => {
+      this.youDev = 'net:' + id;
+      const conn = this.peer.connect(NET.PEER_PREFIX + this.code, { reliable: true });
+      this.conn = conn;
+      conn.on('open', () => {
+        conn.send({ t: 'hello', name: nameOf('online') });
+        ui.joinMode.textContent = t('net_waiting');
+      });
+      conn.on('data', (m) => this.onClientData(m));
+      conn.on('close', () => this.onClientClosed(t('net_hostleft')));
+      conn.on('error', () => this.onClientClosed(t('net_hostleft')));
+    });
+    this.peer.on('error', (err) => {
+      const type = err && err.type;
+      this.onClientClosed(type === 'peer-unavailable' ? t('net_notfound')
+        : t('online_err', { e: String(type || err).toUpperCase() }));
+    });
+  },
+
+  onClientData(m) {
+    if (!m || typeof m !== 'object' || this.role !== 'client') return;
+    if (m.t === 'lobby') enterClientLobby(m.slots || []);
+    else if (m.t === 's') applySnapshot(m);
+    else if (m.t === 'go') clientGameOver(m);
+    else if (m.t === 'full') this.onClientClosed(t('net_full'));
+    else if (m.t === 'busy') this.onClientClosed(t('net_busy'));
+    else if (m.t === 'bye') this.onClientClosed(t('net_hostleft'));
+  },
+
+  onClientClosed(msg) {
+    if (this.role !== 'client') return;
+    this.leave();
+    toast(msg);
+  },
+
+  sendName(name) {
+    if (this.role === 'client' && this.conn && this.conn.open) this.conn.send({ t: 'name', name });
+  },
+
+  sendInput(inp) {
+    if (this.role !== 'client' || !this.conn || !this.conn.open) return;
+    if (inp.tug) this.pendingIn.tg++;
+    if (inp.reel) this.pendingIn.rl++;
+    const key = `${+inp.left}${+inp.right}${+inp.up}${+inp.down}`;
+    const changed = key !== this.lastIn || this.pendingIn.tg || this.pendingIn.rl;
+    if ((changed && this.inTimer <= 0) || this.inTimer <= -0.5) {
+      this.conn.send({
+        t: 'in', l: +inp.left, r: +inp.right, u: +inp.up, d: +inp.down,
+        tg: this.pendingIn.tg, rl: this.pendingIn.rl
+      });
+      this.pendingIn.tg = 0;
+      this.pendingIn.rl = 0;
+      this.lastIn = key;
+      this.inTimer = NET.INPUT_INTERVAL;
+    }
+  },
+
+  // Kilépés (vendég), vagy a szoba bezárása (host) – vissza a főmenübe
+  leave() {
+    if (this.role === 'host') { this.stop(); return; }
+    if (this.role !== 'client') return;
+    const peer = this.peer;
+    const conn = this.conn;
+    this.role = null;
+    this.peer = null;
+    this.conn = null;
+    this.mirror = false;
+    this.menuOpen = false;
+    this.lobby = [];
+    this.fishMap.clear();
+    document.body.classList.remove('net-client');
+    setTimeout(() => {
+      try { if (conn) conn.close(); } catch (e) { /* mindegy */ }
+      try { if (peer) peer.destroy(); } catch (e) { /* mindegy */ }
+    }, 100);
+    clearJoinParam();
+    showMenu();
+  }
+};
+
+function makeRoomCode() {
+  let s = '';
+  for (let i = 0; i < NET.CODE_LEN; i++) s += NET.CODE_CHARS[Math.floor(Math.random() * NET.CODE_CHARS.length)];
+  return s;
+}
+
+function inviteLink() {
+  return `${location.origin}${location.pathname}?join=${Net.code}`;
+}
+
+function clearJoinParam() {
+  try { history.replaceState(null, '', location.pathname); } catch (e) { /* mindegy */ }
+}
+
+// --- Rövid üzenet a játéktér alján
+let toastTimer = 0;
+function toast(msg) {
+  ui.toast.textContent = msg;
+  ui.toast.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ui.toast.classList.add('hidden'), 3500);
+}
+
+function setOnlineStatus(text) {
+  ui.onlineStatus.textContent = text;
+}
+
+// Az online doboz a csatlakozó képernyőn (host)
+function refreshOnlineBox() {
+  const hosting = Net.role === 'host';
+  ui.btnHost.classList.toggle('hidden', !!Net.role);
+  const ready = hosting && Net.peer && Net.peer.open;
+  ui.onlineInfo.classList.toggle('hidden', !ready);
+  if (hosting) {
+    ui.onlineCode.textContent = t('online_code', { code: Net.code });
+    ui.onlineLink.value = inviteLink();
+    setOnlineStatus(ready ? t('online_wait', { n: Net.remoteCount() }) : t('online_starting'));
+  } else if (Net.role !== 'client') {
+    setOnlineStatus('');
+  }
+}
+
+ui.btnHost.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  Sound.init();
+  if (game.state === 'join') Net.host();
+});
+
+ui.btnCopy.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  const link = inviteLink();
+  const fallback = () => {
+    ui.onlineLink.select();
+    try { document.execCommand('copy'); } catch (err) { /* marad a kijelölés */ }
+    toast(t('copied'));
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(() => toast(t('copied')), fallback);
+  } else {
+    fallback();
+  }
+});
+
+/* ---------------- Állapot küldése / tükrözése ---------------- */
+function makeSnapshot(events) {
+  const r1 = (v) => Math.round(v * 10) / 10;
+  const pr = game.predator;
+  return {
+    t: 's', st: game.state, md: game.mode, lv: game.level, tg: game.target, tl: r1(game.timeLeft),
+    ev: game.event && game.event.type !== 'shadow' ? game.event.type : '',
+    evt: game.event ? r1(game.event.time) : 0,
+    sh: game.shake > 0 ? r1(game.shake) : 0,
+    tf: game.timeFlash > 0 ? r1(game.timeFlash) : 0,
+    f: game.fish.map((f) => [
+      f.id, SPECIES_KEYS.indexOf(f.key), r1(f.x), r1(f.y), f.dir,
+      (f.hooked ? 1 : 0) | (f.struggle ? 2 : 0),
+      Math.round((Math.max(0, f.stamina) / f.maxStamina) * 100)
+    ]),
+    p: game.players.map((p) => {
+      const h = p.hook;
+      return [r1(h.x), r1(h.y), HOOK_STATES.indexOf(h.state), h.fish ? h.fish.id : -1,
+        Math.round(h.tension), h.overload > 0 ? 1 : 0, Math.round(p.reelVel), r1(p.boat.x),
+        p.score, p.roundScore, p.caught, p.roundWins, p.name, p.eaten];
+    }),
+    pr: pr ? [r1(pr.x), r1(pr.y), pr.dir, pr.state] : 0,
+    e: events
+  };
+}
+
+function makeMirrorFish(id, key, x, y) {
+  const sp = SPECIES[key];
+  const spr = SPRITES[key];
+  return {
+    id, key, sp, w: spr.width, h: spr.height, x, y, tx: x, ty: y, dir: 1,
+    t: rand(0, 10), phase: rand(0, Math.PI * 2),
+    hooked: false, struggle: false, stamina: 100, maxStamina: 100, owner: null
+  };
+}
+
+// Vendég: a host állapotának átvétele
+function applySnapshot(s) {
+  if (!Net.mirror) {
+    Net.mirror = true;
+    Net.fishMap.clear();
+    game.fish = [];
+    game.predator = null;
+    effects.popups = [];
+    effects.banners = [];
+    ui.joinScreen.classList.add('hidden');
+  }
+  if (s.md !== game.mode) {
+    game.mode = s.md;
+    buildBackground(s.md);
+  }
+  if (s.st !== game.state) {
+    setState(s.st);
+    if (s.st === 'playing' || s.st === 'roundclear') {
+      ui.gameoverScreen.classList.add('hidden');
+      ui.joinScreen.classList.add('hidden');
+      Music.setDuck(1);
+      Music.play(game.mode);
+    } else if (s.st === 'paused') {
+      Music.setDuck(0.4);
+    }
+  }
+  game.level = s.lv;
+  game.target = s.tg;
+  game.timeLeft = s.tl;
+  game.event = s.ev ? { type: s.ev, time: s.evt } : null;
+  if (s.sh) game.shake = s.sh;
+  if (s.tf) game.timeFlash = s.tf;
+
+  // játékosok
+  const n = s.p.length;
+  let fresh = false;
+  if (game.players.length !== n || !game.players.every((p) => p.mirror)) {
+    game.numPlayers = n;
+    setPlayerCount(n);
+    game.players = s.p.map((_, i) => {
+      const p = makePlayer(i, n);
+      p.mirror = true;
+      return p;
+    });
+    fresh = true;
+    scheduleFit();
+  }
+
+  // halak
+  const seen = new Set();
+  for (const [id, ki, x, y, dir, fl, st] of s.f) {
+    let f = Net.fishMap.get(id);
+    if (!f) {
+      f = makeMirrorFish(id, SPECIES_KEYS[ki], x, y);
+      Net.fishMap.set(id, f);
+      game.fish.push(f);
+    }
+    f.tx = x;
+    f.ty = y;
+    f.dir = dir;
+    f.hooked = !!(fl & 1);
+    f.struggle = !!(fl & 2);
+    f.stamina = st;
+    seen.add(id);
+  }
+  if (seen.size !== game.fish.length) {
+    game.fish = game.fish.filter((f) => seen.has(f.id));
+    for (const id of [...Net.fishMap.keys()]) if (!seen.has(id)) Net.fishMap.delete(id);
+  }
+
+  s.p.forEach((a, i) => {
+    const p = game.players[i];
+    const h = p.hook;
+    h.tx = a[0];
+    h.ty = a[1];
+    if (fresh) { h.x = a[0]; h.y = a[1]; p.boat.x = a[7]; }
+    h.state = HOOK_STATES[a[2]] || 'free';
+    h.fish = a[3] >= 0 ? (Net.fishMap.get(a[3]) || null) : null;
+    if (h.fish) h.fish.owner = p;
+    h.tension = a[4];
+    h.overload = a[5];
+    p.reelVel = a[6];
+    p.boat.tx = a[7];
+    p.score = a[8];
+    p.roundScore = a[9];
+    p.caught = a[10];
+    p.roundWins = a[11];
+    p.name = a[12];
+    p.eaten = a[13];
+  });
+
+  // cápa
+  if (s.pr) {
+    if (!game.predator) {
+      game.predator = { x: s.pr[0], y: s.pr[1], w: SPRITES.shark.width, h: SPRITES.shark.height, t: 0, heart: 0 };
+    }
+    const pr = game.predator;
+    pr.tx = s.pr[0];
+    pr.ty = s.pr[1];
+    pr.dir = s.pr[2];
+    pr.state = s.pr[3];
+  } else {
+    game.predator = null;
+  }
+
+  for (const ev of s.e || []) playNetEvent(ev);
+}
+
+function playNetEvent(ev) {
+  const [type, ...a] = ev;
+  if (type === 'tn') Sound.tone(a[0], a[1], a[2] || {});
+  else if (type === 'bn') addBanner(a[0], a[1], a[2], a[3]);
+  else if (type === 'pp') addPopup(a[0], a[1], a[2], a[3], a[4], a[5]);
+  else if (type === 'sp') splash(a[0], a[1], a[2], a[3]);
+}
+
+// Vendég: képkockánként csak simítás és effektek (a számolás a hostnál fut)
+function clientUpdate(dt) {
+  game.time += dt;
+  if (game.shake > 0) game.shake -= dt;
+  if (game.timeFlash > 0) game.timeFlash -= dt;
+  if (game.state === 'playing') game.timeLeft = Math.max(0, game.timeLeft - dt);
+  const k = Math.min(1, dt * 12);
+  const ease = (o) => {
+    if (o.tx === undefined) return;
+    if (Math.abs(o.tx - o.x) > 40 || Math.abs(o.ty - o.y) > 40) {
+      o.x = o.tx;
+      o.y = o.ty;
+    } else {
+      o.x += (o.tx - o.x) * k;
+      o.y += (o.ty - o.y) * k;
+    }
+  };
+  for (const f of game.fish) {
+    f.t += dt;
+    ease(f);
+  }
+  for (const p of game.players) {
+    ease(p.hook);
+    if (p.boat.tx !== undefined) p.boat.x += (p.boat.tx - p.boat.x) * k;
+    if (p.hook.fish) attachFishToHook(p.hook.fish, p.hook);
+  }
+  if (game.predator) {
+    game.predator.t += dt;
+    ease(game.predator);
+  }
+  updateEffects(dt);
+}
+
+// Vendég: a szoba (csatlakozó képernyő) megjelenítése
+function enterClientLobby(slots) {
+  const wasMirror = Net.mirror;
+  Net.mirror = false;
+  Net.menuOpen = false;
+  if (game.state !== 'join' || wasMirror) {
+    ui.startScreen.classList.add('hidden');
+    ui.gameoverScreen.classList.add('hidden');
+    ui.pauseScreen.classList.add('hidden');
+    ui.joinScreen.classList.remove('hidden');
+    setState('join');
+    Music.setDuck(1);
+    Music.play('menu');
+    game.predator = null;
+    game.event = null;
+    effects.banners = [];
+    game.level = 1;
+    game.diff = computeDifficulty(1);
+    populate();
+  }
+  Net.lobby = slots;
+  refreshJoinClient();
+  if (Net.conn && Net.conn.open) ui.joinMode.textContent = t('net_waiting');
+}
+
+function refreshJoinClient() {
+  const slots = Net.lobby;
+  const myIdx = slots.findIndex((s) => s.dev === Net.youDev);
+  ui.joinSlots.forEach((slot, i) => {
+    const s = slots[i];
+    slot.classList.toggle('filled', !!s);
+    slot.querySelector('.slot-text').textContent = s ? (i === myIdx ? t('net_you') : s.label) : t('net_empty');
+    const input = slot.querySelector('.slot-name');
+    if (input) {
+      input.readOnly = i !== myIdx;
+      if (document.activeElement !== input) input.value = s ? s.name : '';
+    }
+    const dice = slot.querySelector('.slot-dice');
+    if (dice) dice.style.visibility = i === myIdx ? 'visible' : 'hidden';
+    drawSlotPreview(slot.querySelector('.slot-preview'), i, !!s);
+  });
+  const n = Math.max(1, slots.length);
+  game.numPlayers = n;
+  setPlayerCount(n);
+  game.players = slots.length
+    ? slots.map((s, i) => { const p = makePlayer(i, n); p.name = s.name; return p; })
+    : [makePlayer(0, 1)];
+  scheduleFit();
+}
+
+function ownSlotInput() {
+  const myIdx = Net.lobby.findIndex((s) => s.dev === Net.youDev);
+  return myIdx >= 0 ? ui.joinSlots[myIdx].querySelector('.slot-name') : null;
+}
+
+function focusOwnName() {
+  const input = ownSlotInput();
+  if (!input) return;
+  input.focus();
+  if (input.select) input.select();
+}
+
+function setOwnName(name) {
+  playerNames.online = name;
+  Store.set('names', playerNames);
+  Net.sendName(name);
+  const input = ownSlotInput();
+  if (input && document.activeElement !== input) input.value = name;
+}
+
+function rerollOwnName() {
+  setOwnName(randomName());
+  Sound.select();
+}
+
+// Vendég: a meccs vége
+function clientGameOver(m) {
+  game.level = m.level;
+  game.mode = m.mode;
+  m.players.forEach((d, i) => { if (game.players[i]) Object.assign(game.players[i], d); });
+  Net.menuOpen = false;
+  ui.pauseScreen.classList.add('hidden');
+  setState('gameover');
+  showGameOverScreen();
+}
+
+// Vendég: saját menü (a játék közben tovább fut)
+function openClientMenu() {
+  Net.menuOpen = true;
+  pauseSel = 0;
+  ui.pauseTitle.textContent = t('menu_title');
+  refreshPause();
+  ui.pauseScreen.classList.remove('hidden');
+}
+
+function closeClientMenu() {
+  Net.menuOpen = false;
+  ui.pauseScreen.classList.add('hidden');
+}
+
+// Vendég billentyűzet
+function clientKey(code) {
+  if (Net.menuOpen) {
+    if (code === 'ArrowUp' || code === 'KeyW') pauseMove(-1);
+    else if (code === 'ArrowDown' || code === 'KeyS') pauseMove(1);
+    else if (code === 'Enter' || code === 'Space') pauseSelect();
+    else if (code === 'Escape' || code === 'KeyP') closeClientMenu();
+    return;
+  }
+  const st = game.state;
+  if (st === 'join') {
+    if (code === 'Escape' || code === 'Backspace') Net.leave();
+    else if (['Space', 'Enter', 'KeyF', 'KeyG', 'Slash', 'Period'].includes(code)) focusOwnName();
+    return;
+  }
+  if (st === 'gameover') {
+    if (code === 'Escape' && game.stateTime > 1.2) Net.leave();
+    return;
+  }
+  const td = keyDevice(code, 'tug');
+  const rd = keyDevice(code, 'reel');
+  if (td) kbEdge[td].tug = true;
+  if (rd) kbEdge[rd].reel = true;
+  if (code === 'Escape' || code === 'KeyP') openClientMenu();
+  else if (code === 'KeyM') toggleMute();
+}
+
+// Vendég kontroller (menük)
+function clientPad(s) {
+  const e = s.edge;
+  if (Net.menuOpen) {
+    if (e.up) pauseMove(-1);
+    if (e.down) pauseMove(1);
+    if (e.reel) pauseSelect();
+    else if (e.start || e.cancel) closeClientMenu();
+    return;
+  }
+  if (game.state === 'join') {
+    if (e.reroll) rerollOwnName();
+    else if (e.cancel || e.back) Net.leave();
+    return;
+  }
+  if (game.state === 'gameover') {
+    if ((e.back || e.cancel) && game.stateTime > 1.2) Net.leave();
+    return;
+  }
+  if (e.start) openClientMenu();
+}
+
+// Meghívó linkkel érkezett? Akkor rögtön csatlakozunk.
+function checkInviteLink() {
+  const code = new URLSearchParams(location.search).get('join');
+  if (!code) return;
+  let tries = 0;
+  const attempt = () => {
+    if (Net.available() || tries > 60) Net.join(code);
+    else { tries++; setTimeout(attempt, 100); }
+  };
+  attempt();
+}
 
 
 /* ==========================================================================
@@ -3366,6 +4151,10 @@ function initLayout() {
    ========================================================================== */
 function update(dt) {
   game.stateTime += dt;
+  if (Net.role === 'client' && Net.mirror) {
+    clientUpdate(dt);
+    return;
+  }
   if (game.state === 'paused') return;
 
   game.time += dt;
@@ -3404,6 +4193,7 @@ function frame(now) {
   Music.update(dt);
   pollInput();
   update(dt);
+  Net.tick(dt);
   render();
   updateHUD();
   requestAnimationFrame(frame);
@@ -3415,4 +4205,5 @@ applyI18n();
 initLayout();
 Music.unlock();                // az .exe-ben azonnal szól; böngészőben az első gombnyomásra
 if (isDesktop) Sound.init();   // az .exe-ben a hang gombnyomás nélkül is indulhat
+checkInviteLink();             // ?join=KÓD a címben: csatlakozás egy online szobához
 requestAnimationFrame(frame);

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Deep Line</title>
   <link rel="stylesheet" href="style.css">
+  <!-- PeerJS: a gépek közötti online kapcsolathoz (ha nem töltődik be, a játék offline ugyanúgy megy) -->
+  <script async src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body class="np-1">
   <main id="game-wrapper">
@@ -58,6 +60,9 @@
         <p class="blink" data-i18n="menu_hint"></p>
       </div>
 
+      <!-- Rövid üzenetek (pl. "LINK COPIED!") -->
+      <div id="toast" class="toast hidden"></div>
+
       <!-- Csatlakozó képernyő -->
       <div id="join-screen" class="overlay hidden">
         <h2 class="pause-title" data-i18n="join_title">PRESS TO JOIN</h2>
@@ -101,11 +106,23 @@
         </div>
         <p id="join-mode" class="mode-desc"></p>
         <div class="buttons">
-          <button id="btn-join-play" data-i18n="btn_play">PLAY</button>
+          <button id="btn-join-play" class="host-only" data-i18n="btn_play">PLAY</button>
           <button id="btn-join-back" data-i18n="btn_back">BACK</button>
         </div>
         <p class="hint" data-i18n="join_keys"></p>
         <p class="hint" data-i18n="join_names"></p>
+
+        <!-- Online szoba (host) -->
+        <div id="online-box" class="online-box">
+          <button id="btn-host" class="host-btn" data-i18n="btn_host">INVITE FRIENDS ONLINE</button>
+          <div id="online-info" class="online-info hidden">
+            <span id="online-code" class="online-code"></span>
+            <input id="online-link" class="online-link" type="text" readonly>
+            <button id="btn-copy" data-i18n="btn_copy">COPY LINK</button>
+          </div>
+          <p id="online-status" class="online-status"></p>
+          <p class="hint host-only" data-i18n="join_online"></p>
+        </div>
         <p class="hint" data-i18n="join_start"></p>
       </div>
 
@@ -114,7 +131,7 @@
         <h2 class="pause-title" data-i18n="pause_title">PAUSED</h2>
         <div class="pause-menu">
           <button class="pause-opt selected" data-action="resume" data-i18n="btn_resume">RESUME</button>
-          <button class="pause-opt" data-action="restart" data-i18n="btn_restart">RESTART</button>
+          <button class="pause-opt host-only" data-action="restart" data-i18n="btn_restart">RESTART</button>
           <button class="pause-opt" data-action="options" data-i18n="btn_options">OPTIONS</button>
           <button class="pause-opt" data-action="menu" data-i18n="btn_menu">MAIN MENU</button>
           <button class="pause-opt desktop-only" data-action="exit" data-i18n="btn_exit">EXIT</button>
@@ -157,10 +174,10 @@
         <p id="go-record" class="record"></p>
         <div id="go-log" class="catch-log"></div>
         <div class="buttons">
-          <button id="btn-again" data-i18n="btn_again">PLAY AGAIN</button>
+          <button id="btn-again" class="host-only" data-i18n="btn_again">PLAY AGAIN</button>
           <button id="btn-menu" data-i18n="btn_menu">MAIN MENU</button>
         </div>
-        <p class="hint" data-i18n="go_hint"></p>
+        <p id="go-hint" class="hint" data-i18n="go_hint"></p>
       </div>
     </div>
 
