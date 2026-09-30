@@ -24,6 +24,7 @@
     </header>
 
     <!-- Játéktér -->
+    <div id="stage">
     <div id="screen">
       <canvas id="game" width="320" height="240"></canvas>
 
@@ -46,6 +47,7 @@
 
         <div class="buttons menu-row action-row" data-row="2">
           <button id="btn-start" class="start-btn act-btn" data-act="start" data-i18n="btn_start">START</button>
+          <button id="btn-online" class="act-btn" data-act="online" data-i18n="btn_online">JOIN ONLINE</button>
           <button id="btn-options" class="act-btn" data-act="options" data-i18n="btn_options">OPTIONS</button>
           <button id="btn-exit" class="act-btn desktop-only" data-act="exit" data-i18n="btn_exit">EXIT</button>
         </div>
@@ -63,6 +65,35 @@
       <!-- Rövid üzenetek (pl. "LINK COPIED!") -->
       <div id="toast" class="toast hidden"></div>
 
+      <!-- Szavazás kirúgásról (minden képernyő felett) -->
+      <div id="vote-box" class="vote-box hidden">
+        <p id="vote-title" class="vote-title"></p>
+        <p id="vote-count" class="vote-count"></p>
+        <p id="vote-keys" class="hint"></p>
+      </div>
+
+      <!-- Kódbeírás online csatlakozáshoz -->
+      <div id="code-screen" class="overlay hidden">
+        <h2 class="pause-title" data-i18n="code_title">JOIN ONLINE</h2>
+        <p class="subtitle" data-i18n="code_prompt">ENTER THE ROOM CODE</p>
+        <div class="code-boxes">
+          <span class="code-box"></span><span class="code-box"></span><span class="code-box"></span>
+          <span class="code-box"></span><span class="code-box"></span><span class="code-box"></span>
+        </div>
+        <div class="buttons">
+          <button id="btn-code-join" data-i18n="btn_join">JOIN</button>
+          <button id="btn-code-back" data-i18n="btn_back">BACK</button>
+        </div>
+        <p class="hint" data-i18n="code_hint"></p>
+      </div>
+
+      <!-- Kirúgás: kit? -->
+      <div id="kick-screen" class="overlay hidden">
+        <h2 class="pause-title" data-i18n="btn_vote_kick">VOTE KICK</h2>
+        <div id="kick-list" class="pause-menu"></div>
+        <p class="hint" data-i18n="kick_hint"></p>
+      </div>
+
       <!-- Csatlakozó képernyő -->
       <div id="join-screen" class="overlay hidden">
         <h2 class="pause-title" data-i18n="join_title">PRESS TO JOIN</h2>
@@ -74,6 +105,8 @@
               <input class="slot-name" type="text" spellcheck="false" autocomplete="off" maxlength="10">
               <button class="slot-dice" title="Random name">&#8635;</button>
             </div>
+            <button class="slot-kick hidden" data-i18n="btn_vote_kick">VOTE KICK</button>
+            <span class="slot-ping"></span>
             <span class="slot-text">PRESS A BUTTON TO JOIN</span>
           </div>
           <div class="join-slot slot-p2">
@@ -83,6 +116,8 @@
               <input class="slot-name" type="text" spellcheck="false" autocomplete="off" maxlength="10">
               <button class="slot-dice" title="Random name">&#8635;</button>
             </div>
+            <button class="slot-kick hidden" data-i18n="btn_vote_kick">VOTE KICK</button>
+            <span class="slot-ping"></span>
             <span class="slot-text">PRESS A BUTTON TO JOIN</span>
           </div>
           <div class="join-slot slot-p3">
@@ -92,6 +127,8 @@
               <input class="slot-name" type="text" spellcheck="false" autocomplete="off" maxlength="10">
               <button class="slot-dice" title="Random name">&#8635;</button>
             </div>
+            <button class="slot-kick hidden" data-i18n="btn_vote_kick">VOTE KICK</button>
+            <span class="slot-ping"></span>
             <span class="slot-text">PRESS A BUTTON TO JOIN</span>
           </div>
           <div class="join-slot slot-p4">
@@ -101,6 +138,8 @@
               <input class="slot-name" type="text" spellcheck="false" autocomplete="off" maxlength="10">
               <button class="slot-dice" title="Random name">&#8635;</button>
             </div>
+            <button class="slot-kick hidden" data-i18n="btn_vote_kick">VOTE KICK</button>
+            <span class="slot-ping"></span>
             <span class="slot-text">PRESS A BUTTON TO JOIN</span>
           </div>
         </div>
@@ -114,11 +153,12 @@
 
         <!-- Online szoba (host) -->
         <div id="online-box" class="online-box">
-          <button id="btn-host" class="host-btn" data-i18n="btn_host">INVITE FRIENDS ONLINE</button>
+          <button id="btn-host" class="host-btn" data-i18n="btn_host">OPEN ONLINE ROOM</button>
           <div id="online-info" class="online-info hidden">
+            <span class="online-label" data-i18n="online_code_label">ROOM CODE</span>
             <span id="online-code" class="online-code"></span>
-            <input id="online-link" class="online-link" type="text" readonly>
-            <button id="btn-copy" data-i18n="btn_copy">COPY LINK</button>
+            <button id="btn-copy-link" data-i18n="btn_copy_link">COPY LINK</button>
+            <button id="btn-copy-code" data-i18n="btn_copy_code">COPY CODE</button>
           </div>
           <p id="online-status" class="online-status"></p>
           <p class="hint host-only" data-i18n="join_online"></p>
@@ -133,6 +173,7 @@
           <button class="pause-opt selected" data-action="resume" data-i18n="btn_resume">RESUME</button>
           <button class="pause-opt host-only" data-action="restart" data-i18n="btn_restart">RESTART</button>
           <button class="pause-opt" data-action="options" data-i18n="btn_options">OPTIONS</button>
+          <button class="pause-opt net-only" data-action="kick" data-i18n="btn_vote_kick">VOTE KICK</button>
           <button class="pause-opt" data-action="menu" data-i18n="btn_menu">MAIN MENU</button>
           <button class="pause-opt desktop-only" data-action="exit" data-i18n="btn_exit">EXIT</button>
         </div>
@@ -182,7 +223,6 @@
     </div>
 
     <!-- Játékos panelek -->
-    <section id="panels">
       <div class="panel idle" id="panel-1">
         <div class="panel-head">
           <span class="tag tag-p1">P1</span>
@@ -246,7 +286,7 @@
         <div class="meter"><div class="meter-head"><span data-i18n="m_tension">LINE TENSION</span><span class="tension-val">000</span></div><div class="bar"><div class="fill tension-fill"></div></div></div>
         <div class="meter"><div class="meter-head"><span data-i18n="m_reel">REEL POWER</span><span class="reel-val">000</span></div><div class="bar thin"><div class="fill reel-fill"></div></div></div>
       </div>
-    </section>
+    </div>
 
     <footer class="help" data-i18n="help"></footer>
   </main>

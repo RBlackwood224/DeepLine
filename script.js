@@ -30,6 +30,9 @@
      - játékosnevek: beírható, vagy vicces véletlen név; mentve eszközönként
    v10:
      - ONLINE MULTIPLAYER: a host meghívó linket küld, a barátok böngészőből csatlakoznak (max. 4 fő)
+   v11:
+     - belépés 6 jegyű szobakóddal, szavazásos kirúgás, ping, kisebb késés (saját horog azonnal)
+     - széles képernyőn a játékos-panelek a két oldalra kerülnek (2x2), nagyobb játéktér
      - OPTIONS menü: külön zene- és effekt-hangerő (mentve)
      - nyelvek: English (alap) / Français
 
@@ -64,6 +67,7 @@ const CONFIG = {
   // --- Körök és szintek ---
   MUSIC_MASTER: 0.8,            // a zene teljes erejének szorzója (0.8 = 20%-kal halkabb); kisebb = halkabb
 
+  VOTE_TIME: 20,                // ennyi mp-ig tart egy kirúgás-szavazás
   MAX_NAME_LEN: 10,             // játékosnév maximális hossza
   MAX_LOCAL_PLAYERS: 4,         // ennyien játszhatnak egy gépen (2 billentyűzet-oldal + kontrollerek)
 
@@ -205,9 +209,16 @@ const I18N = {
     join_keys: `KEYBOARD: SPACE (ARROWS) OR F (WASD)${GAP}CONTROLLER: A`,
     join_start: `ENTER / START: PLAY${GAP}PAD B: LEAVE${GAP}ESC: BACK`,
     join_names: `SPACE / F AGAIN: TYPE YOUR NAME${GAP}PAD Y: RANDOM NAME`,
-    btn_host: "INVITE FRIENDS ONLINE", btn_copy: "COPY LINK", copied: "LINK COPIED!",
+    btn_host: "OPEN ONLINE ROOM", btn_copy_link: "COPY LINK", btn_copy_code: "COPY CODE",
+    copied: "LINK COPIED!", copied_code: "CODE COPIED!", online_code_label: "ROOM CODE",
+    btn_online: "JOIN ONLINE", btn_join: "JOIN", code_title: "JOIN ONLINE", code_prompt: "ENTER THE ROOM CODE",
+    code_hint: `TYPE OR PASTE THE CODE${GAP}PAD: ←→ ↑↓ A`,
+    btn_vote_kick: "VOTE KICK", kick_hint: `↑↓ CHOOSE${GAP}ENTER / A: START VOTE${GAP}ESC / B: BACK`,
+    vote_title: "KICK {name}?", vote_count: "YES {y}   NO {n}   NEEDED {need}   {t}S",
+    vote_keys: `YES: A / ENTER / F${GAP}NO: B / BACKSPACE / G`, vote_wait: "VOTING IN PROGRESS...",
+    vote_kicked: "{name} WAS KICKED", vote_failed: "KICK VOTE FAILED", net_kicked: "YOU WERE REMOVED FROM THE ROOM",
     online_code: "ROOM {code}", online_starting: "CREATING ROOM...",
-    online_wait: "SEND THE LINK TO YOUR FRIENDS - ONLINE: {n}",
+    online_wait: "SEND THE LINK AND THE CODE - ONLINE: {n}",
     online_nolib: "ONLINE IS UNAVAILABLE (NO INTERNET?)",
     online_file: "ONLINE ONLY WORKS IN THE WEB VERSION (GITHUB PAGES)",
     online_err: "ONLINE ERROR: {e}", dev_net: "ONLINE PLAYER", net_you: "YOU - ONLINE", net_empty: "FREE SLOT",
@@ -216,7 +227,7 @@ const I18N = {
     net_hostleft: "THE HOST LEFT THE GAME", net_joined: "{name} JOINED", net_left: "{name} LEFT",
     host_paused: "HOST PAUSED", menu_title: "MENU",
     go_client_hint: `WAITING FOR THE HOST...${GAP}ESC / PAD B: LEAVE`,
-    join_online: `I / PAD X: INVITE FRIENDS ONLINE`,
+    join_online: `I / PAD X: OPEN ONLINE ROOM`,
     dev_kbR: "KEYBOARD - ARROWS", dev_kbL: "KEYBOARD - WASD", dev_pad: "CONTROLLER {n}",
     ctrl_p1: `ARROWS${GAP}SPACE TUG${GAP}ENTER REEL`,
     ctrl_p2: `WASD${GAP}F TUG${GAP}G REEL`,
@@ -277,9 +288,16 @@ const I18N = {
     join_keys: `CLAVIER : ESPACE (FLÈCHES) OU F (ZQSD)${GAP}MANETTE : A`,
     join_start: `ENTRÉE / START : JOUER${GAP}MANETTE B : QUITTER${GAP}ÉCHAP : RETOUR`,
     join_names: `ESPACE / F ENCORE : TON NOM${GAP}MANETTE Y : NOM AU HASARD`,
-    btn_host: "INVITER DES AMIS EN LIGNE", btn_copy: "COPIER LE LIEN", copied: "LIEN COPIÉ !",
+    btn_host: "OUVRIR UN SALON EN LIGNE", btn_copy_link: "COPIER LE LIEN", btn_copy_code: "COPIER LE CODE",
+    copied: "LIEN COPIÉ !", copied_code: "CODE COPIÉ !", online_code_label: "CODE DU SALON",
+    btn_online: "JOUER EN LIGNE", btn_join: "REJOINDRE", code_title: "JOUER EN LIGNE", code_prompt: "ENTRE LE CODE DU SALON",
+    code_hint: `TAPE OU COLLE LE CODE${GAP}MANETTE : ←→ ↑↓ A`,
+    btn_vote_kick: "VOTE D'EXCLUSION", kick_hint: `↑↓ CHOISIR${GAP}ENTRÉE / A : VOTER${GAP}ÉCHAP / B : RETOUR`,
+    vote_title: "EXCLURE {name} ?", vote_count: "OUI {y}   NON {n}   REQUIS {need}   {t}S",
+    vote_keys: `OUI : A / ENTRÉE / F${GAP}NON : B / RETOUR ARRIÈRE / G`, vote_wait: "VOTE EN COURS...",
+    vote_kicked: "{name} A ÉTÉ EXCLU", vote_failed: "VOTE D'EXCLUSION ÉCHOUÉ", net_kicked: "TU AS ÉTÉ EXCLU DU SALON",
     online_code: "SALON {code}", online_starting: "CRÉATION DU SALON...",
-    online_wait: "ENVOIE LE LIEN À TES AMIS - EN LIGNE : {n}",
+    online_wait: "ENVOIE LE LIEN ET LE CODE - EN LIGNE : {n}",
     online_nolib: "EN LIGNE INDISPONIBLE (PAS D'INTERNET ?)",
     online_file: "LE JEU EN LIGNE MARCHE SUR LA VERSION WEB (GITHUB PAGES)",
     online_err: "ERREUR EN LIGNE : {e}", dev_net: "JOUEUR EN LIGNE", net_you: "TOI - EN LIGNE", net_empty: "PLACE LIBRE",
@@ -288,7 +306,7 @@ const I18N = {
     net_hostleft: "L'HÔTE A QUITTÉ LA PARTIE", net_joined: "{name} EST LÀ", net_left: "{name} EST PARTI",
     host_paused: "PAUSE DE L'HÔTE", menu_title: "MENU",
     go_client_hint: `EN ATTENTE DE L'HÔTE...${GAP}ÉCHAP / MANETTE B : QUITTER`,
-    join_online: `I / MANETTE X : INVITER EN LIGNE`,
+    join_online: `I / MANETTE X : OUVRIR UN SALON`,
     dev_kbR: "CLAVIER - FLÈCHES", dev_kbL: "CLAVIER - ZQSD", dev_pad: "MANETTE {n}",
     ctrl_p1: `FLÈCHES${GAP}ESPACE FERRER${GAP}ENTRÉE MOULINER`,
     ctrl_p2: `ZQSD${GAP}F FERRER${GAP}G MOULINER`,
@@ -847,6 +865,7 @@ const startXFor = (index, count) => (W * (index + 1)) / (count + 1);
 // A body osztálya mutatja, hány játékos van (ettől függ a HUD és a panelek)
 function setPlayerCount(n) {
   for (let i = 1; i <= 4; i++) document.body.classList.toggle('np-' + i, i === n);
+  document.body.style.setProperty('--np', n);
 }
 
 function drawSprite(g, img, x, y, flipX = false, flipY = false, wiggle = 0, t = 0) {
@@ -911,7 +930,7 @@ const Sound = {
   },
 
   tone(freq, dur, opts = {}) {
-    if (Net.role === 'host') Net.event(['tn', freq, dur, opts]);   // online vendégek is hallják
+    if (Net.role === 'host') Net.event(['tn', freq, dur, opts, Net.owner || '']);   // online vendégek is hallják
     if (!this.ac || this.muted) return;
     const { type = 'square', slide = null, delay = 0 } = opts;
     const vol = (opts.vol || 0.04) * settings.sfx;
@@ -1179,7 +1198,7 @@ window.addEventListener('keydown', (e) => {
   if (BLOCK_KEYS.includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   if (e.repeat) return;
-  onKeyPress(e.code);
+  onKeyPress(e.code, e.key);
 });
 
 window.addEventListener('keyup', (e) => {
@@ -1212,9 +1231,18 @@ function joinKeyDevice(code) {
   return null;
 }
 
-function onKeyPress(code) {
+function onKeyPress(code, key = '') {
   if (optionsOpen) {
     handleOptionsKey(code);
+    return;
+  }
+  if (kickOpen) {
+    handleKickKey(code);
+    return;
+  }
+  if (voteKey(code)) return;
+  if (game.state === 'code') {
+    handleCodeKey(code, key);
     return;
   }
   if (Net.role === 'client') {
@@ -1318,6 +1346,27 @@ function pollInput() {
       else if (e.tug || e.start || e.back) closeOptions();
       continue;
     }
+    if (kickOpen) {
+      if (e.up) kickMove(-1);
+      if (e.down) kickMove(1);
+      if (e.reel) kickSelect();
+      else if (e.cancel || e.start || e.back) closeKickScreen();
+      continue;
+    }
+    if (Net.role === 'host' && Net.vote) {            // szavazás: A = igen, B = nem
+      if (e.reel) castVote(s.device, true);
+      else if (e.cancel) castVote(s.device, false);
+      continue;
+    }
+    if (Net.role === 'client' && canClientVote()) {
+      if (e.reel) Net.sendVote(true);
+      else if (e.cancel) Net.sendVote(false);
+      continue;
+    }
+    if (game.state === 'code') {
+      codePad(e);
+      continue;
+    }
     if (Net.role === 'client') {
       clientPad(s);
       continue;
@@ -1359,7 +1408,15 @@ function pollInput() {
       reel: KB_DEVICES.some((d) => kbEdge[d].reel) || snaps.some((s) => s.edge.reel)
     };
     for (const d of KB_DEVICES) { kbEdge[d].tug = false; kbEdge[d].reel = false; }
-    if (Net.mirror && !Net.menuOpen && game.state === 'playing') Net.sendInput(inp);
+    const active = Net.mirror && !Net.menuOpen && !Net.voteInfo && game.state === 'playing';
+    Net.localIn = active ? inp : { left: false, right: false, up: false, down: false, tug: false, reel: false };
+    if (active) {
+      // saját hangok azonnal (a host ezeket nem küldi vissza)
+      const me = game.players[Net.ownIdx];
+      if (inp.reel) Sound.mash();
+      if (inp.tug && me && me.hook.state === 'fight') Sound.tug();
+      Net.sendInput(inp);
+    }
     updatePadStatus(snaps.length);
     return;
   }
@@ -1449,7 +1506,12 @@ const ui = {
   joinMode: $('#join-mode'), btnJoinPlay: $('#btn-join-play'), btnJoinBack: $('#btn-join-back'),
   pauseTitle: $('#pause-screen .pause-title'), goHint: $('#go-hint'), toast: $('#toast'),
   btnHost: $('#btn-host'), onlineInfo: $('#online-info'), onlineCode: $('#online-code'),
-  onlineLink: $('#online-link'), btnCopy: $('#btn-copy'), onlineStatus: $('#online-status')
+  btnCopyLink: $('#btn-copy-link'), btnCopyCode: $('#btn-copy-code'), onlineStatus: $('#online-status'),
+  btnOnline: $('#btn-online'), codeScreen: $('#code-screen'),
+  codeBoxes: Array.from(document.querySelectorAll('.code-box')),
+  btnCodeJoin: $('#btn-code-join'), btnCodeBack: $('#btn-code-back'),
+  voteBox: $('#vote-box'), voteTitle: $('#vote-title'), voteCount: $('#vote-count'), voteKeys: $('#vote-keys'),
+  kickScreen: $('#kick-screen'), kickList: $('#kick-list')
 };
 
 function setText(el, txt) {
@@ -1475,7 +1537,7 @@ function setClass(el, cls) {
 const MENU_ROWS = [
   { key: 'mode', values: ['day', 'night'] },
   { key: 'lang', values: LANGS },
-  { key: 'action', get values() { return isDesktop ? ['start', 'options', 'exit'] : ['start', 'options']; } }
+  { key: 'action', get values() { return isDesktop ? ['start', 'online', 'options', 'exit'] : ['start', 'online', 'options']; } }
 ];
 const menu = { row: 0, mode: 'day', lang, action: 'start' };
 const ACTION_ROW = 2;   // az alsó gombsor (START / OPTIONS / EXIT) sorszáma
@@ -1510,6 +1572,7 @@ function menuSet(key, value) {
 // A START a csatlakozó képernyőre visz, és aki megnyomta, rögtön P1 lesz.
 function menuConfirm(device = null) {
   if (menu.row === ACTION_ROW && menu.action === 'options') openOptions('start');
+  else if (menu.row === ACTION_ROW && menu.action === 'online') openCodeScreen();
   else if (menu.row === ACTION_ROW && menu.action === 'exit') exitGame();
   else {
     joined = [];
@@ -1569,7 +1632,8 @@ let pauseSel = 0;
 
 function pauseOptions() {
   return ui.pauseOpts.filter((b) => (isDesktop || !b.classList.contains('desktop-only'))
-    && !(Net.role === 'client' && b.classList.contains('host-only')));
+    && !(Net.role === 'client' && b.classList.contains('host-only'))
+    && !(!Net.role && b.classList.contains('net-only')));
 }
 
 function refreshPause() {
@@ -1589,6 +1653,10 @@ function pauseSelect() {
 }
 
 function doPauseAction(action) {
+  if (action === 'kick') {
+    openKickScreen();
+    return;
+  }
   if (Net.role === 'client') {
     if (action === 'resume') closeClientMenu();
     else if (action === 'options') openOptions('pause');
@@ -2079,7 +2147,9 @@ function updateHook(p, dt) {
   // Gombnyomkodás: minden REEL nyomás lendületet ad, ami magától lecseng
   if (inp.reel) {
     p.reelVel = Math.min(CONFIG.MASH_MAX, p.reelVel + CONFIG.MASH_IMPULSE);
+    Net.owner = p.device;          // ezt a hangot a vendég maga játssza le
     Sound.mash();
+    Net.owner = null;
   }
   p.reelVel *= Math.exp(-CONFIG.MASH_DECAY * dt);
   if (p.reelVel < 0.5) p.reelVel = 0;
@@ -2216,7 +2286,9 @@ function updateFight(p, dt) {
     }
     p.sinceAction = 0;
     effects.bubbles.push(makeBubble(hk.x, hk.y));
+    Net.owner = p.device;
     Sound.tug();
+    Net.owner = null;
   }
 
   hk.tension = clamp(hk.tension - CONFIG.TENSION_DECAY * game.diff.decay * dt, 0, CONFIG.TENSION_MAX);
@@ -2872,6 +2944,10 @@ function render() {
   drawEventIndicator();
   ctx.restore();
 
+  if (Net.role === 'client' && Net.rtt) {
+    const col = Net.rtt < 80 ? '#6cf06c' : Net.rtt < 160 ? '#ffc933' : '#ff4a4a';
+    drawText(ctx, `PING ${Net.rtt}`, W - 3, 3, 1, col, 'right');
+  }
   if (Net.role === 'client' && Net.mirror && game.state === 'paused') {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(0, 0, W, H);
@@ -2905,6 +2981,7 @@ function updateHUD() {
   ui.mode.classList.toggle('night', game.mode === 'night');
 
   game.players.forEach((p, i) => updatePanel(ui.panels[i], p));
+  updateVoteBox();
 }
 
 function updatePanel(pn, p) {
@@ -2969,6 +3046,7 @@ function resetPlayerHook(p) {
 }
 
 function startGame() {
+  if (Net.role === 'host' && Net.vote) return;   // szavazás közben nem indul meccs
   if (!joined.length) joined = ['kbR'];
   game.numPlayers = joined.length;
   game.mode = menu.mode;
@@ -3080,13 +3158,18 @@ function updateTimer(dt) {
   }
 }
 
+// Szöveg biztonságos beillesztése HTML-be (online játékosok neveihez is)
+function escapeHtml(v) {
+  return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function logHtml(p) {
   const cls = 'p' + (p.index + 1) + 'c';
   const title = game.numPlayers > 1 ? t('log_title_p', { p: playerName(p.index) }) : t('log_title');
   const items = p.log.slice().reverse().map((c) =>
-    `<li><span class="${cls}">${c.nick}</span> - ${c.species} ${c.weight.toFixed(2)}KG +${c.pts}</li>`
+    `<li><span class="${cls}">${escapeHtml(c.nick)}</span> - ${escapeHtml(c.species)} ${Number(c.weight).toFixed(2)}KG +${Number(c.pts) || 0}</li>`
   ).join('');
-  return `<div><h3>${title}</h3><ul>${items || `<li>${t('log_empty')}</li>`}</ul></div>`;
+  return `<div><h3>${escapeHtml(title)}</h3><ul>${items || `<li>${escapeHtml(t('log_empty'))}</li>`}</ul></div>`;
 }
 
 function endGame() {
@@ -3137,9 +3220,9 @@ function showGameOverScreen() {
   ];
   if (two) rows.splice(1, 0, [t('stat_rounds'), (p) => pad(p.roundWins, 2)]);
 
-  let html = two ? `<tr><th></th>${ps.map((p, i) => `<th class="c${i + 1}">${playerName(i)}</th>`).join('')}</tr>` : '';
+  let html = two ? `<tr><th></th>${ps.map((p, i) => `<th class="c${i + 1}">${escapeHtml(playerName(i))}</th>`).join('')}</tr>` : '';
   for (const [label, fn] of rows) {
-    html += `<tr><td>${label}</td>${ps.map((p, i) => `<td class="c${i + 1}">${fn(p)}</td>`).join('')}</tr>`;
+    html += `<tr><td>${escapeHtml(label)}</td>${ps.map((p, i) => `<td class="c${i + 1}">${escapeHtml(fn(p))}</td>`).join('')}</tr>`;
   }
   ui.goStats.innerHTML = html;
 
@@ -3172,6 +3255,8 @@ function showMenu() {
   if (Net.role === 'host') Net.stop();
   setState('start');
   joined = [];
+  ui.codeScreen.classList.add('hidden');
+  closeKickScreen();
   ui.gameoverScreen.classList.add('hidden');
   ui.pauseScreen.classList.add('hidden');
   ui.joinScreen.classList.add('hidden');
@@ -3296,6 +3381,7 @@ function openJoin(device = null) {
   setState('join');
   Music.setDuck(1);
   Music.play('menu');
+  joined = joined.filter((d) => !d.startsWith('net:') || Net.conns[d]);   // a kilépett online játékosok helye felszabadul
   if (device) joinDevice(device, true);
   refreshJoin();
 }
@@ -3359,6 +3445,10 @@ function refreshJoin() {
     }
     const dice = slot.querySelector('.slot-dice');
     if (dice) dice.style.visibility = dev && !isNet ? 'visible' : 'hidden';
+    const kick = slot.querySelector('.slot-kick');
+    if (kick) kick.classList.toggle('hidden', !isNet || !!Net.vote);
+    const ping = slot.querySelector('.slot-ping');
+    if (ping) ping.textContent = isNet && Net.pings[dev] ? `PING ${Net.pings[dev]} MS` : '';
     drawSlotPreview(slot.querySelector('.slot-preview'), i, !!dev);
   });
   ui.joinMode.textContent = joined.length === 0 ? '' : (joined.length === 1 ? t('join_solo') : t('join_versus', { n: joined.length }));
@@ -3431,11 +3521,11 @@ ui.btnJoinBack.addEventListener('click', (e) => {
    csak az első összekötésben segít.
    ========================================================================== */
 const NET = {
-  SNAPSHOT_INTERVAL: 0.05,          // a host ennyi mp-enként küld állapotot
-  INPUT_INTERVAL: 0.033,            // a vendég legfeljebb ennyi mp-enként küld bemenetet
+  SNAPSHOT_INTERVAL: 1 / 30,        // a host másodpercenként 30 állapotot küld
+  PING_INTERVAL: 2,                 // a vendég ennyi mp-enként méri a késést
   PEER_PREFIX: 'deepline-rtfish-',  // a szobák azonosítójának előtagja
   CODE_CHARS: 'ABCDEFGHJKMNPQRSTUVWXYZ23456789',
-  CODE_LEN: 5
+  CODE_LEN: 6
 };
 const SPECIES_KEYS = Object.keys(SPECIES);
 const HOOK_STATES = ['free', 'fight', 'reset'];
@@ -3450,6 +3540,10 @@ const Net = {
   inputs: {},           // dev -> { l, r, u, d, tg, rl }
   events: [],           // a következő állapotcsomaggal küldendő események
   sendTimer: 0,
+  vote: null,           // folyamatban lévő kirúgás-szavazás
+  banned: new Set(),    // ebből a szobából kirúgott vendégek
+  pings: {},            // dev -> késés (ms)
+  owner: null,          // melyik vendég saját hangja szól éppen
   // vendég
   conn: null,
   youDev: null,
@@ -3460,6 +3554,12 @@ const Net = {
   pendingIn: { tg: 0, rl: 0 },
   lastIn: '',
   inTimer: 0,
+  pingTimer: 0,
+  rtt: 0,
+  ownIdx: -1,           // a saját játékos sorszáma
+  voteInfo: null,       // a hosttól kapott szavazás-állapot
+  localIn: null,
+  predReel: 0,
 
   available() {
     return typeof window.Peer === 'function';
@@ -3476,6 +3576,8 @@ const Net = {
     if (!this.available()) { toast(t('online_nolib')); return; }
     this.role = 'host';
     this.code = makeRoomCode();
+    this.banned = new Set();
+    document.body.classList.add('net-on');
     this.peer = new window.Peer(NET.PEER_PREFIX + this.code);
     this.peer.on('open', () => refreshOnlineBox());
     this.peer.on('connection', (conn) => this.onHostConnection(conn));
@@ -3506,6 +3608,7 @@ const Net = {
   onHostData(dev, conn, msg) {
     if (!msg || typeof msg !== 'object') return;
     if (msg.t === 'hello') {
+      if (this.banned.has(dev)) { conn.send({ t: 'kicked' }); setTimeout(() => conn.close(), 400); return; }
       if (game.state !== 'join') { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 400); return; }
       if (joined.length >= CONFIG.MAX_LOCAL_PLAYERS) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 400); return; }
       this.conns[dev] = conn;
@@ -3523,6 +3626,14 @@ const Net = {
       r.l = msg.l; r.r = msg.r; r.u = msg.u; r.d = msg.d;
       r.tg = Math.min(6, r.tg + (msg.tg || 0));
       r.rl = Math.min(12, r.rl + (msg.rl || 0));
+    } else if (msg.t === 'ping') {
+      conn.send({ t: 'pong', ts: msg.ts });
+      if (msg.rtt) this.pings[dev] = Math.round(Number(msg.rtt)) || 0;
+      if (game.state === 'join') refreshJoin();
+    } else if (msg.t === 'vote') {
+      castVote(dev, !!msg.yes);
+    } else if (msg.t === 'votekick') {
+      startVote(String(msg.target || ''), dev);
     }
   },
 
@@ -3543,8 +3654,8 @@ const Net = {
 
   sendLobby() {
     if (this.role !== 'host') return;
-    const slots = joined.map((d) => ({ name: nameOf(d), label: deviceLabel(d), dev: d }));
-    this.broadcast({ t: 'lobby', slots });
+    const slots = joined.map((d) => ({ name: nameOf(d), label: deviceLabel(d), dev: d, ping: this.pings[d] || 0 }));
+    this.broadcast({ t: 'lobby', slots, vote: voteInfo() });
     refreshOnlineBox();
   },
 
@@ -3565,6 +3676,11 @@ const Net = {
 
   tick(dt) {
     if (this.role === 'host') {
+      if (this.vote) {
+        this.vote.time -= dt;
+        if (this.vote.time <= 0) checkVote();
+        else if (game.state === 'join' && Math.ceil(this.vote.time) !== Math.ceil(this.vote.time + dt)) this.sendLobby();
+      }
       if (!this.remoteCount()) { this.events.length = 0; return; }
       this.sendTimer -= dt;
       if (this.sendTimer > 0) return;
@@ -3576,6 +3692,11 @@ const Net = {
       this.events = [];
     } else if (this.role === 'client') {
       this.inTimer -= dt;
+      this.pingTimer -= dt;
+      if (this.pingTimer <= 0 && this.conn && this.conn.open) {
+        this.pingTimer = NET.PING_INTERVAL;
+        this.conn.send({ t: 'ping', ts: performance.now(), rtt: this.rtt });
+      }
     }
   },
 
@@ -3594,6 +3715,9 @@ const Net = {
     this.conns = {};
     this.inputs = {};
     this.events = [];
+    this.vote = null;
+    this.pings = {};
+    document.body.classList.remove('net-on');
     joined = joined.filter((d) => !d.startsWith('net:'));
     if (!silent) refreshOnlineBox();
   },
@@ -3603,7 +3727,10 @@ const Net = {
     if (!this.available()) { toast(t('online_nolib')); clearJoinParam(); return; }
     this.role = 'client';
     this.code = String(code).toUpperCase();
-    document.body.classList.add('net-client');
+    this.rtt = 0;
+    this.pingTimer = 0.5;
+    this.voteInfo = null;
+    document.body.classList.add('net-client', 'net-on');
     enterClientLobby([]);
     ui.joinMode.textContent = t('net_connecting');
     this.peer = new window.Peer();
@@ -3628,8 +3755,18 @@ const Net = {
 
   onClientData(m) {
     if (!m || typeof m !== 'object' || this.role !== 'client') return;
-    if (m.t === 'lobby') enterClientLobby(m.slots || []);
-    else if (m.t === 's') applySnapshot(m);
+    if (m.t === 'lobby') {
+      this.voteInfo = m.vote || null;
+      enterClientLobby(m.slots || []);
+    } else if (m.t === 'pong') {
+      this.rtt = Math.max(1, Math.round(performance.now() - m.ts));
+    } else if (m.t === 'kicked') {
+      this.onClientClosed(t('net_kicked'));
+    }
+    else if (m.t === 's') {
+      this.voteInfo = m.vt || null;
+      applySnapshot(m);
+    }
     else if (m.t === 'go') clientGameOver(m);
     else if (m.t === 'full') this.onClientClosed(t('net_full'));
     else if (m.t === 'busy') this.onClientClosed(t('net_busy'));
@@ -3642,26 +3779,26 @@ const Net = {
     toast(msg);
   },
 
+  sendVote(yes) {
+    if (this.role === 'client' && this.conn && this.conn.open) this.conn.send({ t: 'vote', yes: !!yes });
+  },
+
   sendName(name) {
     if (this.role === 'client' && this.conn && this.conn.open) this.conn.send({ t: 'name', name });
   },
 
+  // A gombnyomások azonnal mennek; változatlan állapotnál fél mp-enként egy életjel
   sendInput(inp) {
     if (this.role !== 'client' || !this.conn || !this.conn.open) return;
-    if (inp.tug) this.pendingIn.tg++;
-    if (inp.reel) this.pendingIn.rl++;
     const key = `${+inp.left}${+inp.right}${+inp.up}${+inp.down}`;
-    const changed = key !== this.lastIn || this.pendingIn.tg || this.pendingIn.rl;
-    if ((changed && this.inTimer <= 0) || this.inTimer <= -0.5) {
-      this.conn.send({
-        t: 'in', l: +inp.left, r: +inp.right, u: +inp.up, d: +inp.down,
-        tg: this.pendingIn.tg, rl: this.pendingIn.rl
-      });
-      this.pendingIn.tg = 0;
-      this.pendingIn.rl = 0;
-      this.lastIn = key;
-      this.inTimer = NET.INPUT_INTERVAL;
-    }
+    const edge = inp.tug || inp.reel;
+    if (key === this.lastIn && !edge && this.inTimer > 0) return;
+    this.conn.send({
+      t: 'in', l: +inp.left, r: +inp.right, u: +inp.up, d: +inp.down,
+      tg: inp.tug ? 1 : 0, rl: inp.reel ? 1 : 0
+    });
+    this.lastIn = key;
+    this.inTimer = 0.5;
   },
 
   // Kilépés (vendég), vagy a szoba bezárása (host) – vissza a főmenübe
@@ -3677,7 +3814,11 @@ const Net = {
     this.menuOpen = false;
     this.lobby = [];
     this.fishMap.clear();
-    document.body.classList.remove('net-client');
+    this.voteInfo = null;
+    this.ownIdx = -1;
+    this.rtt = 0;
+    closeKickScreen();
+    document.body.classList.remove('net-client', 'net-on');
     setTimeout(() => {
       try { if (conn) conn.close(); } catch (e) { /* mindegy */ }
       try { if (peer) peer.destroy(); } catch (e) { /* mindegy */ }
@@ -3693,8 +3834,9 @@ function makeRoomCode() {
   return s;
 }
 
-function inviteLink() {
-  return `${location.origin}${location.pathname}?join=${Net.code}`;
+// A játék címe (a kódot külön kell megadni!)
+function gameLink() {
+  return `${location.origin}${location.pathname}`;
 }
 
 function clearJoinParam() {
@@ -3721,8 +3863,7 @@ function refreshOnlineBox() {
   const ready = hosting && Net.peer && Net.peer.open;
   ui.onlineInfo.classList.toggle('hidden', !ready);
   if (hosting) {
-    ui.onlineCode.textContent = t('online_code', { code: Net.code });
-    ui.onlineLink.value = inviteLink();
+    ui.onlineCode.textContent = Net.code;
     setOnlineStatus(ready ? t('online_wait', { n: Net.remoteCount() }) : t('online_starting'));
   } else if (Net.role !== 'client') {
     setOnlineStatus('');
@@ -3735,19 +3876,28 @@ ui.btnHost.addEventListener('click', (e) => {
   if (game.state === 'join') Net.host();
 });
 
-ui.btnCopy.addEventListener('click', (e) => {
-  e.currentTarget.blur();
-  const link = inviteLink();
+function copyText(text, msg) {
   const fallback = () => {
-    ui.onlineLink.select();
-    try { document.execCommand('copy'); } catch (err) { /* marad a kijelölés */ }
-    toast(t('copied'));
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (err) { /* nem sikerült */ }
+    ta.remove();
+    toast(msg);
   };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(link).then(() => toast(t('copied')), fallback);
-  } else {
-    fallback();
-  }
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast(msg), fallback);
+  else fallback();
+}
+
+ui.btnCopyLink.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  copyText(gameLink(), t('copied'));
+});
+
+ui.btnCopyCode.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  copyText(Net.code, t('copied_code'));
 });
 
 /* ---------------- Állapot küldése / tükrözése ---------------- */
@@ -3769,9 +3919,10 @@ function makeSnapshot(events) {
       const h = p.hook;
       return [r1(h.x), r1(h.y), HOOK_STATES.indexOf(h.state), h.fish ? h.fish.id : -1,
         Math.round(h.tension), h.overload > 0 ? 1 : 0, Math.round(p.reelVel), r1(p.boat.x),
-        p.score, p.roundScore, p.caught, p.roundWins, p.name, p.eaten];
+        p.score, p.roundScore, p.caught, p.roundWins, p.name, p.eaten, p.device || ''];
     }),
     pr: pr ? [r1(pr.x), r1(pr.y), pr.dir, pr.state] : 0,
+    vt: voteInfo(),
     e: events
   };
 }
@@ -3873,9 +4024,11 @@ function applySnapshot(s) {
     p.roundScore = a[9];
     p.caught = a[10];
     p.roundWins = a[11];
-    p.name = a[12];
+    p.name = cleanName(a[12] || '');
     p.eaten = a[13];
+    p.device = a[14] || '';
   });
+  Net.ownIdx = game.players.findIndex((p) => p.device && p.device === Net.youDev);
 
   // cápa
   if (s.pr) {
@@ -3896,7 +4049,10 @@ function applySnapshot(s) {
 
 function playNetEvent(ev) {
   const [type, ...a] = ev;
-  if (type === 'tn') Sound.tone(a[0], a[1], a[2] || {});
+  if (type === 'tn') {
+    if (a[3] && a[3] === Net.youDev) return;   // a saját hangunkat már lejátszottuk
+    Sound.tone(a[0], a[1], a[2] || {});
+  }
   else if (type === 'bn') addBanner(a[0], a[1], a[2], a[3]);
   else if (type === 'pp') addPopup(a[0], a[1], a[2], a[3], a[4], a[5]);
   else if (type === 'sp') splash(a[0], a[1], a[2], a[3]);
@@ -3923,16 +4079,51 @@ function clientUpdate(dt) {
     f.t += dt;
     ease(f);
   }
-  for (const p of game.players) {
-    ease(p.hook);
-    if (p.boat.tx !== undefined) p.boat.x += (p.boat.tx - p.boat.x) * k;
+  game.players.forEach((p, i) => {
+    if (i === Net.ownIdx) predictOwnHook(p, dt);
+    else {
+      ease(p.hook);
+      if (p.boat.tx !== undefined) p.boat.x += (p.boat.tx - p.boat.x) * k;
+    }
     if (p.hook.fish) attachFishToHook(p.hook.fish, p.hook);
-  }
+  });
   if (game.predator) {
     game.predator.t += dt;
     ease(game.predator);
   }
   updateEffects(dt);
+}
+
+// Vendég: a saját horog azonnal mozog a gombnyomásra (előrejelzés), és csak
+// finoman igazodik a host által küldött helyzethez. Fárasztás közben a host dönt.
+function predictOwnHook(p, dt) {
+  const h = p.hook;
+  const inp = Net.localIn || {};
+  if (h.tx === undefined) return;
+  if (h.state === 'free' && game.state === 'playing') {
+    if (inp.reel) Net.predReel = Math.min(CONFIG.MASH_MAX, Net.predReel + CONFIG.MASH_IMPULSE);
+    Net.predReel *= Math.exp(-CONFIG.MASH_DECAY * dt);
+    const dx = ((inp.right ? 1 : 0) - (inp.left ? 1 : 0)) * CONFIG.HOOK_SPEED_X * dt;
+    const dy = ((inp.down ? CONFIG.HOOK_SPEED_DOWN : 0) - (inp.up ? CONFIG.HOOK_SPEED_UP : 0)) * dt - Net.predReel * dt;
+    h.x = clamp(h.x + dx, 6, W - 6);
+    h.y = clamp(h.y + dy, HOOK_MIN_Y, HOOK_MAX_Y);
+    const ex = h.tx - h.x;
+    const ey = h.ty - h.y;
+    if (Math.abs(ex) > 30 || Math.abs(ey) > 30) {
+      h.x = h.tx;
+      h.y = h.ty;
+    } else {
+      // mozgás közben alig húzzuk vissza, álló helyzetben gyorsan a host helyére csúszik
+      h.x += ex * Math.min(1, dt * (dx === 0 ? 6 : 1));
+      h.y += ey * Math.min(1, dt * (Math.abs(dy) < 0.01 ? 6 : 1));
+    }
+  } else {
+    Net.predReel = 0;
+    const k = Math.min(1, dt * 20);
+    h.x += (h.tx - h.x) * k;
+    h.y += (h.ty - h.y) * k;
+  }
+  updateBoat(p, dt);   // a saját csónak is azonnal követi a horgot
 }
 
 // Vendég: a szoba (csatlakozó képernyő) megjelenítése
@@ -3955,7 +4146,10 @@ function enterClientLobby(slots) {
     game.diff = computeDifficulty(1);
     populate();
   }
-  Net.lobby = slots;
+  Net.lobby = slots.slice(0, CONFIG.MAX_LOCAL_PLAYERS).map((sl) => ({
+    name: cleanName(sl.name || ''), label: String(sl.label || '').slice(0, 30), dev: String(sl.dev || ''),
+    ping: Number(sl.ping) || 0
+  }));
   refreshJoinClient();
   if (Net.conn && Net.conn.open) ui.joinMode.textContent = t('net_waiting');
 }
@@ -3974,6 +4168,10 @@ function refreshJoinClient() {
     }
     const dice = slot.querySelector('.slot-dice');
     if (dice) dice.style.visibility = i === myIdx ? 'visible' : 'hidden';
+    const kick = slot.querySelector('.slot-kick');
+    if (kick) kick.classList.toggle('hidden', !s || i === myIdx || !s.dev.startsWith('net:') || !!Net.voteInfo);
+    const ping = slot.querySelector('.slot-ping');
+    if (ping) ping.textContent = s && s.ping ? `PING ${s.ping} MS` : '';
     drawSlotPreview(slot.querySelector('.slot-preview'), i, !!s);
   });
   const n = Math.max(1, slots.length);
@@ -4014,7 +4212,15 @@ function rerollOwnName() {
 function clientGameOver(m) {
   game.level = m.level;
   game.mode = m.mode;
-  m.players.forEach((d, i) => { if (game.players[i]) Object.assign(game.players[i], d); });
+  m.players.forEach((d, i) => {
+    const p = game.players[i];
+    if (!p || !d) return;
+    p.name = cleanName(d.name || '');
+    for (const k of ['score', 'caught', 'eaten', 'roundWins']) p[k] = Number(d[k]) || 0;
+    p.biggest = d.biggest || null;
+    p.rarest = d.rarest || null;
+    p.log = Array.isArray(d.log) ? d.log.slice(-60) : [];
+  });
   Net.menuOpen = false;
   ui.pauseScreen.classList.add('hidden');
   setState('gameover');
@@ -4084,16 +4290,351 @@ function clientPad(s) {
   if (e.start) openClientMenu();
 }
 
-// Meghívó linkkel érkezett? Akkor rögtön csatlakozunk.
-function checkInviteLink() {
-  const code = new URLSearchParams(location.search).get('join');
-  if (!code) return;
-  let tries = 0;
-  const attempt = () => {
-    if (Net.available() || tries > 60) Net.join(code);
-    else { tries++; setTimeout(attempt, 100); }
+
+
+/* ==========================================================================
+   19/D. BELÉPÉS KÓDDAL (JOIN ONLINE)
+   Billentyűzeten gépelhető / beilleszthető, kontrolleren arcade-stílusban:
+   ←→ karakter választása, ↑↓ betű váltása, A csatlakozás, B vissza.
+   ========================================================================== */
+const codeEntry = { chars: [], cursor: 0 };
+
+function openCodeScreen() {
+  codeEntry.chars = Array(NET.CODE_LEN).fill('');
+  codeEntry.cursor = 0;
+  ui.startScreen.classList.add('hidden');
+  ui.codeScreen.classList.remove('hidden');
+  setState('code');
+  refreshCode();
+  Sound.select();
+}
+
+function closeCodeScreen() {
+  ui.codeScreen.classList.add('hidden');
+  showMenu();
+}
+
+function codeComplete() {
+  return codeEntry.chars.every((c) => c);
+}
+
+function refreshCode() {
+  ui.codeBoxes.forEach((b, i) => {
+    b.textContent = codeEntry.chars[i] || '';
+    b.classList.toggle('cursor', i === codeEntry.cursor);
+  });
+  ui.btnCodeJoin.disabled = !codeComplete();
+}
+
+function codeType(ch) {
+  ch = String(ch).toUpperCase();
+  if (ch.length !== 1 || !NET.CODE_CHARS.includes(ch)) return;
+  codeEntry.chars[codeEntry.cursor] = ch;
+  if (codeEntry.cursor < NET.CODE_LEN - 1) codeEntry.cursor++;
+  refreshCode();
+  Sound.select();
+}
+
+function codeBackspace() {
+  if (!codeEntry.chars[codeEntry.cursor] && codeEntry.cursor > 0) codeEntry.cursor--;
+  codeEntry.chars[codeEntry.cursor] = '';
+  refreshCode();
+}
+
+function codeCycle(d) {
+  const cs = NET.CODE_CHARS;
+  const cur = codeEntry.chars[codeEntry.cursor];
+  let i = cur ? cs.indexOf(cur) : (d > 0 ? -1 : 0);
+  i = (i + d + cs.length) % cs.length;
+  codeEntry.chars[codeEntry.cursor] = cs[i];
+  refreshCode();
+  Sound.select();
+}
+
+function codeMove(d) {
+  codeEntry.cursor = clamp(codeEntry.cursor + d, 0, NET.CODE_LEN - 1);
+  refreshCode();
+}
+
+function codePaste(text) {
+  const clean = String(text).toUpperCase().split('').filter((c) => NET.CODE_CHARS.includes(c)).slice(0, NET.CODE_LEN);
+  if (!clean.length) return;
+  codeEntry.chars = Array.from({ length: NET.CODE_LEN }, (_, i) => clean[i] || '');
+  codeEntry.cursor = Math.min(clean.length, NET.CODE_LEN - 1);
+  refreshCode();
+  Sound.select();
+}
+
+function codeSubmit() {
+  if (!codeComplete()) return;
+  ui.codeScreen.classList.add('hidden');
+  Net.join(codeEntry.chars.join(''));
+}
+
+function handleCodeKey(code, key) {
+  if (code === 'Enter' || code === 'NumpadEnter') codeSubmit();
+  else if (code === 'Escape') closeCodeScreen();
+  else if (code === 'Backspace') codeBackspace();
+  else if (code === 'ArrowLeft') codeMove(-1);
+  else if (code === 'ArrowRight') codeMove(1);
+  else if (code === 'ArrowUp') codeCycle(1);
+  else if (code === 'ArrowDown') codeCycle(-1);
+  else if (key && key.length === 1) codeType(key);
+}
+
+function codePad(e) {
+  if (e.left) codeMove(-1);
+  if (e.right) codeMove(1);
+  if (e.up) codeCycle(1);
+  if (e.down) codeCycle(-1);
+  if (e.reel || e.start) {
+    if (codeComplete()) codeSubmit();
+    else codeMove(1);
+  } else if (e.cancel || e.back) {
+    closeCodeScreen();
+  }
+}
+
+document.addEventListener('paste', (e) => {
+  if (game.state !== 'code') return;
+  const text = e.clipboardData ? e.clipboardData.getData('text') : '';
+  codePaste(text);
+  e.preventDefault();
+});
+
+ui.btnOnline.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  Sound.init();
+  if (game.state === 'start' && !optionsOpen) openCodeScreen();
+});
+ui.btnCodeJoin.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  if (game.state === 'code') codeSubmit();
+});
+ui.btnCodeBack.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  if (game.state === 'code') closeCodeScreen();
+});
+
+
+/* ==========================================================================
+   19/E. KIRÚGÁS SZAVAZÁSSAL
+   Bárki indíthat szavazást egy ONLINE játékos ellen. Mindenki szavaz (a célpont
+   kivételével), a helyi játékosok külön-külön. Többség kell; 20 mp után a be
+   nem adott szavazat "nem". Meccs közben a szavazás idejére áll a játék.
+   ========================================================================== */
+const VOTE_YES = { Enter: 'kbR', NumpadEnter: 'kbR', KeyF: 'kbL' };
+const VOTE_NO = { Backspace: 'kbR', KeyG: 'kbL' };
+
+function voteNeed(v) {
+  return Math.floor(v.voters.length / 2) + 1;
+}
+
+// A szavazás állapota a kijelzéshez / küldéshez
+function voteInfo() {
+  const v = Net.vote;
+  if (!v) return null;
+  return {
+    name: v.name, yes: v.yes.length, no: v.no.length, need: voteNeed(v),
+    time: Math.max(0, Math.ceil(v.time)), voters: v.voters.slice()
   };
-  attempt();
+}
+
+// Host: szavazás indítása
+function startVote(target, initiator) {
+  if (Net.role !== 'host' || Net.vote) return;
+  if (!target.startsWith('net:') || !joined.includes(target) || !Net.conns[target]) return;
+  const voters = joined.filter((d) => d !== target && (!d.startsWith('net:') || Net.conns[d]));
+  if (!voters.length) return;
+  Net.vote = { target, name: nameOf(target), voters, yes: [], no: [], time: CONFIG.VOTE_TIME };
+  if (initiator && voters.includes(initiator)) Net.vote.yes.push(initiator);
+  closeKickScreen();
+  Sound.event();
+  if (!checkVote()) syncVote();
+}
+
+// Host: egy szavazat (mindenki csak egyszer szavazhat)
+function castVote(dev, yes) {
+  const v = Net.vote;
+  if (!v || !v.voters.includes(dev) || v.yes.includes(dev) || v.no.includes(dev)) return;
+  (yes ? v.yes : v.no).push(dev);
+  Sound.select();
+  if (!checkVote()) syncVote();
+}
+
+// Host: eldőlt-e már? (true = véget ért)
+function checkVote() {
+  const v = Net.vote;
+  if (!v) return true;
+  const need = voteNeed(v);
+  if (v.yes.length >= need) { endVote(true); return true; }
+  if (v.no.length > v.voters.length - need || v.time <= 0) { endVote(false); return true; }
+  return false;
+}
+
+function endVote(kick) {
+  const v = Net.vote;
+  Net.vote = null;
+  if (kick) kickPlayer(v.target);
+  addBanner(kick ? t('vote_kicked', { name: v.name }) : t('vote_failed'), 2, kick ? '#ff4a4a' : '#dfe8f5', false);
+  syncVote();
+}
+
+// A szavazás állapotának kiküldése (a szobában a lobby-üzenettel, játékban az állapotcsomaggal)
+function syncVote() {
+  if (game.state === 'join') refreshJoin();
+}
+
+// Host: a játékos eltávolítása
+function kickPlayer(dev) {
+  const conn = Net.conns[dev];
+  if (conn) {
+    try { conn.send({ t: 'kicked' }); } catch (e) { /* mindegy */ }
+    setTimeout(() => { try { conn.close(); } catch (e) { /* mindegy */ } }, 300);
+  }
+  delete Net.conns[dev];
+  Net.banned.add(dev);
+  Net.inputs[dev] = { l: 0, r: 0, u: 0, d: 0, tg: 0, rl: 0 };
+  const p = game.players.find((pl) => pl.device === dev);
+  if (p && p.hook.fish) {
+    releaseFish(p);
+    p.hook.state = 'reset';
+  }
+  if (game.state === 'join') leaveDevice(dev);
+  refreshOnlineBox();
+}
+
+function canClientVote() {
+  return !!(Net.voteInfo && Net.voteInfo.voters && Net.voteInfo.voters.includes(Net.youDev));
+}
+
+// Billentyűzetes szavazat (true = a billentyűt a szavazás "elnyelte")
+function voteKey(code) {
+  const yes = VOTE_YES[code];
+  const no = VOTE_NO[code];
+  if (!yes && !no) return false;
+  if (Net.role === 'host' && Net.vote) {
+    const dev = yes || no;
+    const other = dev === 'kbR' ? 'kbL' : 'kbR';
+    const voter = Net.vote.voters.includes(dev) ? dev : (Net.vote.voters.includes(other) ? other : null);
+    if (voter) castVote(voter, !!yes);
+    return true;
+  }
+  if (Net.role === 'client' && canClientVote()) {
+    Net.sendVote(!!yes);
+    return true;
+  }
+  return false;
+}
+
+// A szavazódoboz frissítése (minden képkockában)
+function updateVoteBox() {
+  const info = Net.role === 'host' ? voteInfo() : (Net.role === 'client' ? Net.voteInfo : null);
+  ui.voteBox.classList.toggle('hidden', !info);
+  if (!info) return;
+  setText(ui.voteTitle, t('vote_title', { name: info.name }));
+  setText(ui.voteCount, t('vote_count', { y: info.yes, n: info.no, need: info.need, t: info.time }));
+  const iVote = Net.role === 'host' ? true : canClientVote();
+  setText(ui.voteKeys, iVote ? t('vote_keys') : t('vote_wait'));
+}
+
+// Kirúgás-gombok a szoba helyein
+ui.joinSlots.forEach((slot, i) => {
+  const btn = slot.querySelector('.slot-kick');
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    if (Net.role === 'host') {
+      const dev = joined[i];
+      const me = joined.find((d) => !d.startsWith('net:')) || null;
+      if (dev) startVote(dev, me);
+    } else if (Net.role === 'client') {
+      const s = Net.lobby[i];
+      if (s && Net.conn && Net.conn.open) Net.conn.send({ t: 'votekick', target: s.dev });
+    }
+  });
+});
+
+// --- "Kit rúgjunk ki?" lista (a szünet menüből)
+let kickOpen = false;
+let kickSel = 0;
+let kickTargets = [];
+
+function openKickScreen() {
+  if (Net.role === 'host') {
+    kickTargets = joined.filter((d) => d.startsWith('net:') && Net.conns[d]).map((d) => ({ dev: d, name: nameOf(d) }));
+  } else if (Net.role === 'client') {
+    kickTargets = Net.lobby.length
+      ? Net.lobby.filter((s) => s.dev.startsWith('net:') && s.dev !== Net.youDev).map((s) => ({ dev: s.dev, name: s.name }))
+      : game.players.filter((p) => p.device && p.device.startsWith('net:') && p.device !== Net.youDev)
+        .map((p) => ({ dev: p.device, name: p.name }));
+  }
+  if (!kickTargets.length || (Net.role === 'host' ? Net.vote : Net.voteInfo)) {
+    toast(t('vote_failed'));
+    return;
+  }
+  ui.kickList.innerHTML = '';
+  kickTargets.forEach((k, i) => {
+    const b = document.createElement('button');
+    b.textContent = k.name;
+    b.addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      kickSel = i;
+      kickSelect();
+    });
+    ui.kickList.appendChild(b);
+  });
+  const back = document.createElement('button');
+  back.textContent = t('btn_back');
+  back.addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    closeKickScreen();
+  });
+  ui.kickList.appendChild(back);
+  kickSel = 0;
+  kickOpen = true;
+  ui.pauseScreen.classList.add('hidden');
+  ui.kickScreen.classList.remove('hidden');
+  refreshKick();
+  Sound.select();
+}
+
+function refreshKick() {
+  Array.from(ui.kickList.children).forEach((b, i) => b.classList.toggle('selected', i === kickSel));
+}
+
+function kickMove(d) {
+  const n = kickTargets.length + 1;
+  kickSel = (kickSel + d + n) % n;
+  refreshKick();
+  Sound.select();
+}
+
+function kickSelect() {
+  if (kickSel >= kickTargets.length) { closeKickScreen(); return; }
+  const target = kickTargets[kickSel].dev;
+  closeKickScreen();
+  if (Net.role === 'host') {
+    const me = joined.find((d) => !d.startsWith('net:')) || null;
+    startVote(target, me);
+  } else if (Net.role === 'client' && Net.conn && Net.conn.open) {
+    Net.conn.send({ t: 'votekick', target });
+    closeClientMenu();
+  }
+}
+
+function closeKickScreen() {
+  if (!kickOpen) return;
+  kickOpen = false;
+  ui.kickScreen.classList.add('hidden');
+  if (game.state === 'paused' || Net.menuOpen) ui.pauseScreen.classList.remove('hidden');
+}
+
+function handleKickKey(code) {
+  if (code === 'ArrowUp' || code === 'KeyW') kickMove(-1);
+  else if (code === 'ArrowDown' || code === 'KeyS') kickMove(1);
+  else if (code === 'Enter' || code === 'Space') kickSelect();
+  else if (code === 'Escape' || code === 'Backspace') closeKickScreen();
 }
 
 
@@ -4103,8 +4644,11 @@ function checkInviteLink() {
    játékteret (4:3, torzítás nélkül) akkorára méretezzük, amekkora még kifér.
    ========================================================================== */
 const LAYOUT = {
-  MAX_WIDTH: 1056,      // ablakban legfeljebb ekkora (teljes képernyőn nincs felső határ)
-  MARGIN: 20            // a lap szélein hagyott hely (px)
+  MAX_WIDTH: 1600,      // a játéktér legnagyobb szélessége ablakban (teljes képernyőn nincs határ)
+  MARGIN: 20,           // a lap szélein hagyott hely (px)
+  SIDE_MIN: 170,        // az oldalsó panelek szélessége (min / max)
+  SIDE_MAX: 270,
+  SIDE_MIN_HEIGHT: 400  // ennél alacsonyabb játéktérnél a panelek alulra kerülnek
 };
 
 let fitPending = false;
@@ -4112,17 +4656,45 @@ let fitPending = false;
 function fitLayout() {
   fitPending = false;
   const wrap = document.getElementById('game-wrapper');
+  const stage = document.getElementById('stage');
   const scr = document.getElementById('screen');
+  const hud = document.getElementById('hud');
+  const help = document.querySelector('.help');
+  const iw = window.innerWidth;
+  const ih = window.innerHeight;
+  const GAP = 8;
+  const borderW = scr.offsetWidth - canvas.offsetWidth;          // a játéktér kerete
+  const borderH = scr.offsetHeight - canvas.offsetHeight;
+  const helpH = help && help.offsetParent ? help.offsetHeight + 6 : 0;
+  const availH = ih - LAYOUT.MARGIN - hud.offsetHeight - 6 - helpH;
   const cap = isFullscreen() ? Infinity : LAYOUT.MAX_WIDTH;
-  // két kör: a panelek magassága kicsit függ a szélességtől
+
+  // 1) panelek OLDALT: a játéktér magasságát csak az ablak magassága korlátozza
+  const sideW = Math.round(clamp(iw * 0.14, LAYOUT.SIDE_MIN, LAYOUT.SIDE_MAX));
+  const sideCanvasW = Math.min(cap, (availH - borderH) * 4 / 3, iw * 0.98 - 2 * (sideW + GAP) - borderW);
+
+  // 2) panelek ALUL: lemérjük, mennyi helyet foglal a panelsor
+  document.body.classList.remove('side-panels');
+  let bottomCanvasW = Math.min(cap, iw * 0.96 - borderW, (availH - borderH) * 4 / 3);
   for (let i = 0; i < 2; i++) {
-    const chrome = wrap.offsetHeight - scr.offsetHeight;          // pontsáv + panelek + súgó + rések
-    const borderW = scr.offsetWidth - canvas.offsetWidth;          // a játéktér kerete
-    const borderH = scr.offsetHeight - canvas.offsetHeight;
-    const canvasH = window.innerHeight - LAYOUT.MARGIN - chrome - borderH;
-    const width = Math.floor(Math.max(300, Math.min(window.innerWidth * 0.96, cap, canvasH * 4 / 3 + borderW)));
-    if (Math.abs(wrap.offsetWidth - width) <= 1) break;
-    wrap.style.width = width + 'px';
+    stage.style.width = Math.floor(bottomCanvasW + borderW) + 'px';
+    const panelsH = stage.offsetHeight - scr.offsetHeight;
+    bottomCanvasW = Math.min(cap, iw * 0.96 - borderW, (availH - panelsH - borderH) * 4 / 3);
+  }
+
+  // amelyik nagyobb játékteret ad, az nyer (a 4:3 arány mindig marad)
+  const useSide = sideCanvasW >= bottomCanvasW && sideCanvasW * 0.75 >= LAYOUT.SIDE_MIN_HEIGHT;
+  if (useSide) {
+    const w = Math.floor(Math.max(300, sideCanvasW));
+    document.body.classList.add('side-panels');
+    stage.style.setProperty('--screen-w', (w + borderW) + 'px');
+    stage.style.setProperty('--side-w', sideW + 'px');
+    stage.style.width = '';
+    wrap.style.width = (w + borderW + 2 * (sideW + GAP)) + 'px';
+  } else {
+    const w = Math.floor(Math.max(300, bottomCanvasW));
+    stage.style.width = (w + borderW) + 'px';
+    wrap.style.width = (w + borderW) + 'px';
   }
 }
 
@@ -4140,7 +4712,7 @@ function initLayout() {
   if (window.ResizeObserver) {
     const ro = new ResizeObserver(scheduleFit);
     ro.observe(document.getElementById('hud'));
-    ro.observe(document.getElementById('panels'));
+    for (let n = 1; n <= 4; n++) ro.observe(document.getElementById('panel-' + n));
   }
   fitLayout();
 }
@@ -4155,6 +4727,7 @@ function update(dt) {
     clientUpdate(dt);
     return;
   }
+  if (Net.role === 'host' && Net.vote && game.state !== 'join') return;   // szavazás alatt áll a játék
   if (game.state === 'paused') return;
 
   game.time += dt;
@@ -4205,5 +4778,4 @@ applyI18n();
 initLayout();
 Music.unlock();                // az .exe-ben azonnal szól; böngészőben az első gombnyomásra
 if (isDesktop) Sound.init();   // az .exe-ben a hang gombnyomás nélkül is indulhat
-checkInviteLink();             // ?join=KÓD a címben: csatlakozás egy online szobához
 requestAnimationFrame(frame);
