@@ -11,6 +11,8 @@
   --dim: #6b7fa6;
   --amber: #ffc933;   /* P1 színe is */
   --sea: #5fd0ff;     /* P2 színe is */
+  --pink: #ff6fb0;    /* P3 */
+  --lime: #6cf06c;    /* P4 */
   --red: #ff4a4a;
   --green: #6cf06c;
 }
@@ -36,7 +38,10 @@ body {
 }
 
 /* 1 játékosnál a P2 elemek rejtve */
-body:not(.two-player) .only-2p { display: none !important; }
+/* Játékosszám szerint rejtett elemek (need-2 = legalább 2 játékos kell hozzá stb.) */
+body.np-1 .need-2, body.np-1 .need-3, body.np-1 .need-4,
+body.np-2 .need-3, body.np-2 .need-4,
+body.np-3 .need-4 { display: none !important; }
 
 #game-wrapper {
   /* 4:3 arány mindig megmarad, csak a méret változik (max. 10%-kal nagyobb, mint korábban) */
@@ -64,6 +69,8 @@ body:not(.two-player) .only-2p { display: none !important; }
 .hud-item .value { color: var(--text); text-shadow: 2px 2px 0 #000; }
 .hud-item .value.p1c { color: var(--amber); }
 .hud-item .value.p2c { color: var(--sea); }
+.hud-item .value.p3c { color: var(--pink); }
+.hud-item .value.p4c { color: var(--lime); }
 #target.reached { color: var(--green); }
 #time.low { color: var(--red); animation: blink 0.5s steps(1) infinite; }
 
@@ -166,6 +173,8 @@ button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
 .tag { display: inline-block; padding: 0 4px; border: 2px solid var(--dim); color: var(--dim); line-height: 1.2; }
 .tag-p1 { border-color: var(--amber); color: var(--amber); }
 .tag-p2 { border-color: var(--sea); color: var(--sea); }
+.tag-p3 { border-color: var(--pink); color: var(--pink); }
+.tag-p4 { border-color: var(--lime); color: var(--lime); }
 
 .pad-status { color: var(--dim); font-size: 0.8em; }
 .pad-status.on { color: var(--green); }
@@ -180,6 +189,7 @@ button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
 }
 .go-title.p1win { color: var(--amber); text-shadow: 3px 3px 0 #6b4a00, 6px 6px 0 #000; }
 .go-title.p2win { color: var(--sea); text-shadow: 3px 3px 0 #0f3f5a, 6px 6px 0 #000; }
+.go-title.winner { text-shadow: 3px 3px 0 #222, 6px 6px 0 #000; }
 
 .stats { border-collapse: collapse; }
 .stats td, .stats th { padding: 0.1em 0.7em; text-align: right; }
@@ -187,6 +197,8 @@ button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
 .stats th { color: var(--dim); }
 .stats .c1 { color: var(--amber); }
 .stats .c2 { color: var(--sea); }
+.stats .c3 { color: var(--pink); }
+.stats .c4 { color: var(--lime); }
 
 .record { color: var(--green); }
 .record.new { animation: blink 0.6s steps(1) infinite; }
@@ -204,6 +216,8 @@ button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
 .catch-log ul { list-style: none; }
 .catch-log .p1c { color: var(--amber); }
 .catch-log .p2c { color: var(--sea); }
+.catch-log .p3c { color: var(--pink); }
+.catch-log .p4c { color: var(--lime); }
 
 .buttons { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
 .hint { color: var(--dim); font-size: 0.8em; }
@@ -214,7 +228,9 @@ button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
   grid-template-columns: 1fr;
   gap: 6px;
 }
-body.two-player #panels { grid-template-columns: 1fr 1fr; }
+body.np-2 #panels { grid-template-columns: repeat(2, 1fr); }
+body.np-3 #panels { grid-template-columns: repeat(3, 1fr); }
+body.np-4 #panels { grid-template-columns: repeat(4, 1fr); }
 
 .panel {
   display: grid;
@@ -226,9 +242,13 @@ body.two-player #panels { grid-template-columns: 1fr 1fr; }
   box-shadow: 4px 4px 0 #000;
   font-size: clamp(9px, 1.3vw, 14px);
 }
-body.two-player .panel { grid-template-columns: 1fr; }
+body:not(.np-1) .panel { grid-template-columns: 1fr; }
+/* 3-4 játékosnál tömörebb panelek */
+body.np-3 .panel, body.np-4 .panel { font-size: clamp(8px, 1.05vw, 12px); padding: 4px 7px; gap: 2px 8px; }
 #panel-1 { border-left-color: var(--amber); }
 #panel-2 { border-left-color: var(--sea); }
+#panel-3 { border-left-color: var(--pink); }
+#panel-4 { border-left-color: var(--lime); }
 
 .panel-head, .panel-stats {
   grid-column: 1 / -1;
@@ -282,7 +302,7 @@ body.two-player .panel { grid-template-columns: 1fr; }
 
 @media (max-width: 560px) {
   .panel { grid-template-columns: 1fr; }
-  body.two-player #panels { grid-template-columns: 1fr; }
+  body:not(.np-1) #panels { grid-template-columns: 1fr 1fr; }
 }
 
 /* ---------- v3: szünet menü, nyelvválasztó, asztali verzió ---------- */
@@ -370,3 +390,73 @@ body.in-game .help { display: none; }
 .fs-row.active { border-color: var(--border); background: rgba(44, 61, 99, 0.35); }
 .fs-btn { min-width: 5em; }
 .fs-btn.selected { background: var(--green); color: #000; border-color: #fff; }
+
+/* ---------- v7: csatlakozó képernyő ---------- */
+.join-slots {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.join-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 15em;
+  min-height: 5.5em;
+  padding: 10px 14px;
+  border: 3px dashed var(--border);
+  background: rgba(13, 20, 36, 0.8);
+}
+.join-slot .slot-text { color: var(--dim); animation: blink 1s steps(1) infinite; }
+
+.join-slot.filled { border-style: solid; }
+.join-slot.filled .slot-text { color: var(--text); animation: none; }
+.slot-p1.filled { border-color: var(--amber); box-shadow: 0 0 0 2px rgba(255, 201, 51, 0.25); }
+.slot-p2.filled { border-color: var(--sea); box-shadow: 0 0 0 2px rgba(95, 208, 255, 0.25); }
+.slot-p3.filled { border-color: var(--pink); box-shadow: 0 0 0 2px rgba(255, 111, 176, 0.25); }
+.slot-p4.filled { border-color: var(--lime); box-shadow: 0 0 0 2px rgba(108, 240, 108, 0.25); }
+
+/* v8: 4 hely – 2x2 rács, és a játékos színes figurája */
+.join-slots { display: grid; grid-template-columns: repeat(2, minmax(13em, 1fr)); gap: 10px 14px; }
+.join-slot { min-height: 4.8em; padding: 6px 10px; gap: 4px; }
+.slot-preview {
+  width: calc(30px * 3);
+  height: calc(16px * 3);
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+#btn-join-play:disabled { opacity: 0.35; cursor: default; }
+#join-mode { color: var(--green); }
+
+/* ---------- v9: játékosnevek ---------- */
+.slot-name-row { display: none; align-items: center; gap: 6px; }
+.join-slot.filled .slot-name-row { display: flex; }
+
+.slot-name {
+  width: 11ch;
+  font: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: clamp(11px, 1.6vw, 16px);
+  padding: 2px 6px;
+  background: #000;
+  color: var(--text);
+  border: 2px solid var(--border);
+  outline: none;
+  text-align: center;
+}
+.slot-name:focus { border-color: #fff; background: #10182c; }
+.slot-p1 .slot-name { color: var(--amber); }
+.slot-p2 .slot-name { color: var(--sea); }
+.slot-p3 .slot-name { color: var(--pink); }
+.slot-p4 .slot-name { color: var(--lime); }
+
+.slot-dice { padding: 0.05em 0.5em; font-size: clamp(11px, 1.6vw, 16px); }
+
+/* a panelen és a HUD-on a név a játékos színében */
+.panel .tag { max-width: 12ch; overflow: hidden; white-space: nowrap; }

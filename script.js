@@ -22,6 +22,12 @@
    v6:
      - zene globálisan 20%-kal halkabb (MUSIC_MASTER), nagyobb képernyő, FULLSCREEN opció
      - automatikus méretezés: a játék minden felbontáson teljesen befér
+   v7:
+     - "PRESS TO JOIN" csatlakozó képernyő: mindenki azzal az eszközzel játszik, amivel belépett
+   v8:
+     - akár 4 játékos egy gépen (billentyűzet-oldalak + kontrollerek), saját színnel
+   v9:
+     - játékosnevek: beírható, vagy vicces véletlen név; mentve eszközönként
      - OPTIONS menü: külön zene- és effekt-hangerő (mentve)
      - nyelvek: English (alap) / Français
 
@@ -55,6 +61,9 @@
 const CONFIG = {
   // --- Körök és szintek ---
   MUSIC_MASTER: 0.8,            // a zene teljes erejének szorzója (0.8 = 20%-kal halkabb); kisebb = halkabb
+
+  MAX_NAME_LEN: 10,             // játékosnév maximális hossza
+  MAX_LOCAL_PLAYERS: 4,         // ennyien játszhatnak egy gépen (2 billentyűzet-oldal + kontrollerek)
 
   ROUND_DURATION: 60,           // a kör induló ideje (mp) – minden fogás bónuszidőt ad
   TIME_MAX: 99,                 // ennél több idő nem gyűlhet össze
@@ -178,7 +187,7 @@ const GAP = '\u00a0\u00a0\u00a0';   // nem törhető szóközök a vezérlés-so
 
 const I18N = {
   en: {
-    p: "P", tag_p1: "P1", tag_p2: "P2",
+    p: "P", tag_p1: "P1", tag_p2: "P2", tag_p3: "P3", tag_p4: "P4",
     hud_score: "SCORE", hud_round: "ROUND", hud_target: "TARGET", hud_time: "TIME",
     mode_day: "DAY", mode_night: "NIGHT",
     subtitle: "A RETRO FISHING CONTEST",
@@ -188,7 +197,13 @@ const I18N = {
     desc_2: "VERSUS: FIRST TO THE TARGET WINS THE ROUND.",
     desc_day: "DAY: LOTS OF SMALL AND MEDIUM FISH.",
     desc_night: "NIGHT: FEWER FISH, BIGGER PREY, X1.5 POINTS.",
-    btn_start: "START", btn_exit: "EXIT",
+    btn_start: "START", btn_exit: "EXIT", tag_keys: "KEYS",
+    join_title: "PRESS TO JOIN", join_empty: "PRESS A BUTTON TO JOIN",
+    join_solo: "SOLO GAME", join_versus: "{n} PLAYER VERSUS", btn_play: "PLAY",
+    join_keys: `KEYBOARD: SPACE (ARROWS) OR F (WASD)${GAP}CONTROLLER: A`,
+    join_start: `ENTER / START: PLAY${GAP}PAD B: LEAVE${GAP}ESC: BACK`,
+    join_names: `SPACE / F AGAIN: TYPE YOUR NAME${GAP}PAD Y: RANDOM NAME`,
+    dev_kbR: "KEYBOARD - ARROWS", dev_kbL: "KEYBOARD - WASD", dev_pad: "CONTROLLER {n}",
     ctrl_p1: `ARROWS${GAP}SPACE TUG${GAP}ENTER REEL`,
     ctrl_p2: `WASD${GAP}F TUG${GAP}G REEL`,
     ctrl_pad: `STICK${GAP}B/X TUG${GAP}A REEL${GAP}START PAUSE`,
@@ -232,7 +247,7 @@ const I18N = {
   },
 
   fr: {
-    p: "J", tag_p1: "J1", tag_p2: "J2",
+    p: "J", tag_p1: "J1", tag_p2: "J2", tag_p3: "J3", tag_p4: "J4",
     hud_score: "SCORE", hud_round: "MANCHE", hud_target: "OBJECTIF", hud_time: "TEMPS",
     mode_day: "JOUR", mode_night: "NUIT",
     subtitle: "UN CONCOURS DE PÊCHE RÉTRO",
@@ -242,7 +257,13 @@ const I18N = {
     desc_2: "DUEL : LE PREMIER À L'OBJECTIF GAGNE LA MANCHE.",
     desc_day: "JOUR : BEAUCOUP DE PETITS ET MOYENS POISSONS.",
     desc_night: "NUIT : MOINS DE POISSONS, PLUS GROSSES PRISES, POINTS X1,5.",
-    btn_start: "JOUER", btn_exit: "QUITTER",
+    btn_start: "JOUER", btn_exit: "QUITTER", tag_keys: "CLAVIER",
+    join_title: "APPUIE POUR REJOINDRE", join_empty: "APPUIE SUR UN BOUTON",
+    join_solo: "PARTIE SOLO", join_versus: "VERSUS À {n} JOUEURS", btn_play: "JOUER",
+    join_keys: `CLAVIER : ESPACE (FLÈCHES) OU F (ZQSD)${GAP}MANETTE : A`,
+    join_start: `ENTRÉE / START : JOUER${GAP}MANETTE B : QUITTER${GAP}ÉCHAP : RETOUR`,
+    join_names: `ESPACE / F ENCORE : TON NOM${GAP}MANETTE Y : NOM AU HASARD`,
+    dev_kbR: "CLAVIER - FLÈCHES", dev_kbL: "CLAVIER - ZQSD", dev_pad: "MANETTE {n}",
     ctrl_p1: `FLÈCHES${GAP}ESPACE FERRER${GAP}ENTRÉE MOULINER`,
     ctrl_p2: `ZQSD${GAP}F FERRER${GAP}G MOULINER`,
     ctrl_pad: `STICK${GAP}B/X FERRER${GAP}A MOULINER${GAP}START PAUSE`,
@@ -327,6 +348,8 @@ function t(key, vars) {
 
 const fishName = (key) => t('fish_' + key);
 const pLabel = (index) => t('p') + (index + 1);
+// A játékos neve (ha nincs, akkor P1, P2 ...)
+const playerName = (index) => (game.players[index] && game.players[index].name) || pLabel(index);
 
 
 /* ==========================================================================
@@ -779,8 +802,26 @@ const PLAYER_STYLE = [
     tag: '#5fd0ff', line: '#ffe9a8',
     person: buildSprite(PERSON_ROWS, { h: '#2a6ad8', s: '#e8b27c', e: '#101010', j: '#3fbf6a' }),
     boat: buildSprite(BOAT_ROWS, { b: '#3b5f7a', w: '#e6f0ff' })
+  },
+  {
+    tag: '#ff6fb0', line: '#ffc4e2',
+    person: buildSprite(PERSON_ROWS, { h: '#c8307a', s: '#f2c08a', e: '#101010', j: '#ff8fc4' }),
+    boat: buildSprite(BOAT_ROWS, { b: '#6e2f5c', w: '#ffe4f2' })
+  },
+  {
+    tag: '#6cf06c', line: '#d2ffc8',
+    person: buildSprite(PERSON_ROWS, { h: '#2f8f3a', s: '#d9a06a', e: '#101010', j: '#9be35a' }),
+    boat: buildSprite(BOAT_ROWS, { b: '#3d5a24', w: '#eaffdc' })
   }
 ];
+
+// Kezdő pozíció: a csónakok egyenletesen elosztva a víz felett
+const startXFor = (index, count) => (W * (index + 1)) / (count + 1);
+
+// A body osztálya mutatja, hány játékos van (ettől függ a HUD és a panelek)
+function setPlayerCount(n) {
+  for (let i = 1; i <= 4; i++) document.body.classList.toggle('np-' + i, i === n);
+}
 
 function drawSprite(g, img, x, y, flipX = false, flipY = false, wiggle = 0, t = 0) {
   const w = img.width;
@@ -1040,10 +1081,11 @@ const effects = { particles: [], bubbles: [], popups: [], banners: [] };
 const world = { weeds: [], clouds: [], stars: [] };
 const bestScores = Object.assign({ day: 0, night: 0 }, Store.get('best', {}));
 
-function makePlayer(index, count) {
-  const startX = count === 1 ? W / 2 : (index === 0 ? W * 0.3 : W * 0.7);
+function makePlayer(index, count, device = null) {
+  const startX = startXFor(index, count);
   return {
     index,
+    device,              // 'kbR' (nyilak) | 'kbL' (WASD) | 'pad0'..'pad3' (kontroller)
     style: PLAYER_STYLE[index],
     hook: { x: startX, y: HOOK_MIN_Y + 30, state: 'free', fish: null, tension: 0, overload: 0 },
     boat: { x: startX },
@@ -1091,11 +1133,21 @@ const KEYMAP = [
 ];
 
 const keys = Object.create(null);
-const kbEdge = [{ tug: false, reel: false }, { tug: false, reel: false }];
+// Billentyűzet-"eszközök": kbR = nyilas oldal, kbL = WASD oldal
+const kbEdge = { kbR: { tug: false, reel: false }, kbL: { tug: false, reel: false } };
+const KB_DEVICES = ['kbR', 'kbL'];
 const BLOCK_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Enter', 'Slash'];
 
 window.addEventListener('keydown', (e) => {
   Sound.init();
+  // névbeírás közben a billentyűk a szövegmezőé (ENTER / ESC befejezi)
+  if (e.target && e.target.tagName === 'INPUT') {
+    if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Escape') {
+      e.preventDefault();
+      e.target.blur();
+    }
+    return;
+  }
   if (BLOCK_KEYS.includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   if (e.repeat) return;
@@ -1103,6 +1155,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('keyup', (e) => {
+  if (e.target && e.target.tagName === 'INPUT') return;
   if (BLOCK_KEYS.includes(e.code)) e.preventDefault();
   keys[e.code] = false;
 });
@@ -1116,12 +1169,19 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden && game.state === 'playing') pauseGame();
 });
 
-// Melyik játékoshoz tartozik egy akció-gomb?
-function playerForKey(code, action) {
+// Melyik billentyűzet-oldalhoz tartozik egy akció-gomb?
+function keyDevice(code, action) {
   for (let i = 0; i < KEYMAP.length; i++) {
-    if (KEYMAP[i][action].includes(code)) return game.numPlayers === 1 ? 0 : i;
+    if (KEYMAP[i][action].includes(code)) return KB_DEVICES[i];
   }
-  return -1;
+  return null;
+}
+
+// Csatlakozó képernyőn: melyik billentyű melyik oldalt "lépteti be"
+function joinKeyDevice(code) {
+  if (['Space', 'Slash', 'Period'].includes(code)) return 'kbR';
+  if (['KeyF', 'KeyG'].includes(code)) return 'kbL';
+  return null;
 }
 
 function onKeyPress(code) {
@@ -1135,16 +1195,15 @@ function onKeyPress(code) {
       else if (code === 'ArrowDown' || code === 'KeyS') menuMove(1);
       else if (code === 'ArrowLeft' || code === 'KeyA') menuChange(-1);
       else if (code === 'ArrowRight' || code === 'KeyD') menuChange(1);
-      else if (code === 'Digit1') menuSet('players', 1);
-      else if (code === 'Digit2') menuSet('players', 2);
-      else if (code === 'Enter' || code === 'Space') menuConfirm();
+      else if (code === 'Enter' || code === 'Space') menuConfirm('kbR');
+      else if (code === 'KeyF' || code === 'KeyG') menuConfirm('kbL');
       else if (code === 'Escape' && game.stateTime > 0.6) exitGame();
       break;
     case 'playing': {
-      const tp = playerForKey(code, 'tug');
-      const r = playerForKey(code, 'reel');
-      if (tp >= 0 && tp < game.players.length) kbEdge[tp].tug = true;
-      if (r >= 0 && r < game.players.length) kbEdge[r].reel = true;
+      const td = keyDevice(code, 'tug');
+      const rd = keyDevice(code, 'reel');
+      if (td) kbEdge[td].tug = true;
+      if (rd) kbEdge[rd].reel = true;
       if (code === 'KeyP' || code === 'Escape') pauseGame();
       else if (code === 'KeyM') toggleMute();
       break;
@@ -1156,10 +1215,22 @@ function onKeyPress(code) {
       else if (code === 'KeyP' || code === 'Escape') resumeGame();
       else if (code === 'KeyM') toggleMute();
       break;
+    case 'join':
+      if (code === 'Enter' || code === 'NumpadEnter') {
+        if (joined.length) startGame();
+        else joinDevice('kbR');
+      } else if (code === 'Escape' || code === 'Backspace') {
+        joinEscape();
+      } else {
+        const dev = joinKeyDevice(code);
+        if (dev && joined.includes(dev)) editName(dev);   // újra megnyomva: név beírása
+        else if (dev) joinDevice(dev);
+      }
+      break;
     case 'gameover':
       if (game.stateTime < 1.2) return;   // véletlen gombnyomkodás ne indítson rögtön újat
       if (code === 'Enter' || code === 'Space') startGame();
-      else if (code === 'Escape') showMenu();
+      else if (code === 'Escape') openJoin();
       break;
   }
 }
@@ -1184,6 +1255,8 @@ function padSnapshot(pad) {
     down: b(13) || ay > dz,
     reel: b(0) || b(7),          // A vagy RT: tekerés (nyomkodni kell!)
     tug: b(1) || b(2) || b(5),   // B, X vagy RB: rántás
+    cancel: b(1),                // B: kilépés a csatlakozó képernyőn
+    reroll: b(3),                // Y: új véletlen név a csatlakozó képernyőn
     start: b(9),
     back: b(8)
   };
@@ -1191,7 +1264,7 @@ function padSnapshot(pad) {
   const edge = {};
   for (const k of Object.keys(held)) edge[k] = held[k] && !prev[k];
   padPrev[pad.index] = held;
-  return { held, edge };
+  return { index: pad.index, device: 'pad' + pad.index, held, edge };
 }
 
 // Minden képkockában: kontrollerek + billentyűzet -> játékos-bemenetek
@@ -1215,7 +1288,7 @@ function pollInput() {
       if (e.down) menuMove(1);
       if (e.left) menuChange(-1);
       if (e.right) menuChange(1);
-      if (e.start || e.reel) { Sound.init(); menuConfirm(); }
+      if (e.start || e.reel) { Sound.init(); menuConfirm(s.device); }
       else if (e.back && game.stateTime > 0.6) exitGame();
     } else if (game.state === 'playing') {
       if (e.start) pauseGame();
@@ -1224,24 +1297,33 @@ function pollInput() {
       if (e.down) pauseMove(1);
       if (e.reel) pauseSelect();
       else if (e.start || e.tug) resumeGame();
+    } else if (game.state === 'join') {
+      const isIn = joined.includes(s.device);
+      if (!isIn && (e.reel || e.start)) joinDevice(s.device);
+      else if (isIn && e.start) startGame();
+      else if (isIn && e.reroll) rerollName(s.device);
+      else if (isIn && (e.cancel || e.back)) leaveDevice(s.device);
+      else if (!isIn && (e.cancel || e.back) && joined.length === 0) showMenu();
     } else if (game.state === 'gameover' && game.stateTime > 1.2) {
       if (e.start || e.reel) startGame();
-      else if (e.back || e.tug) showMenu();
+      else if (e.back || e.tug) openJoin();
     }
   }
 
-  // Játékosok bemenete
+  // Játékosok bemenete: mindenki a saját eszközéről (egyedül bármelyikről)
   const n = game.players.length;
+  const solo = n === 1;
   for (let i = 0; i < n; i++) {
     const p = game.players[i];
-    const maps = game.numPlayers === 1 ? KEYMAP : [KEYMAP[i]];
+    const dev = p.device || 'kbR';
+    const kbs = solo ? KB_DEVICES : KB_DEVICES.filter((d) => d === dev);
+    const maps = kbs.map((d) => KEYMAP[KB_DEVICES.indexOf(d)]);
     const held = (action) => maps.some((m) => m[action].some((c) => keys[c]));
     const inp = {
       left: held('left'), right: held('right'), up: held('up'), down: held('down'),
-      tug: kbEdge[i].tug, reel: kbEdge[i].reel
+      tug: kbs.some((d) => kbEdge[d].tug), reel: kbs.some((d) => kbEdge[d].reel)
     };
-    // 1P: bármelyik kontroller; 2P: 1. kontroller = P1, 2. kontroller = P2
-    const mine = game.numPlayers === 1 ? snaps : (snaps[i] ? [snaps[i]] : []);
+    const mine = solo ? snaps : snaps.filter((s) => s.device === dev);
     for (const s of mine) {
       inp.left = inp.left || s.held.left;
       inp.right = inp.right || s.held.right;
@@ -1252,7 +1334,7 @@ function pollInput() {
     }
     p.in = inp;
   }
-  for (const e of kbEdge) { e.tug = false; e.reel = false; }
+  for (const d of KB_DEVICES) { kbEdge[d].tug = false; kbEdge[d].reel = false; }
 
   updatePadStatus(snaps.length);
 }
@@ -1268,6 +1350,7 @@ const $ = (sel) => document.querySelector(sel);
 function panelRefs(root) {
   return {
     root,
+    tag: root.querySelector('.tag'),
     fishName: root.querySelector('.fish-name'),
     status: root.querySelector('.fight-status'),
     depth: root.querySelector('.depth'),
@@ -1283,9 +1366,11 @@ function panelRefs(root) {
 }
 
 const ui = {
-  p1Label: $('#p1-label'), p1Score: $('#p1-score'), p2Score: $('#p2-score'),
+  p1Label: $('#p1-label'),
+  hudLabels: [1, 2, 3, 4].map((n) => $('#p' + n + '-label')),
+  scores: [$('#p1-score'), $('#p2-score'), $('#p3-score'), $('#p4-score')],
   round: $('#round'), target: $('#target'), time: $('#time'), mode: $('#mode'),
-  panels: [panelRefs($('#panel-1')), panelRefs($('#panel-2'))],
+  panels: [1, 2, 3, 4].map((n) => panelRefs($('#panel-' + n))),
   startScreen: $('#start-screen'), gameoverScreen: $('#gameover-screen'),
   menuRows: document.querySelectorAll('.menu-row'),
   opts: document.querySelectorAll('.opt'),
@@ -1297,7 +1382,9 @@ const ui = {
   btnOptions: $('#btn-options'), actBtns: document.querySelectorAll('.act-btn'),
   optionsScreen: $('#options-screen'), volRows: Array.from(document.querySelectorAll('.vol-row')),
   volBtns: document.querySelectorAll('.vol-btn'), btnOptBack: $('#btn-options-back'),
-  fsRow: $('#fs-row'), btnFullscreen: $('#btn-fullscreen')
+  fsRow: $('#fs-row'), btnFullscreen: $('#btn-fullscreen'),
+  joinScreen: $('#join-screen'), joinSlots: Array.from(document.querySelectorAll('.join-slot')),
+  joinMode: $('#join-mode'), btnJoinPlay: $('#btn-join-play'), btnJoinBack: $('#btn-join-back')
 };
 
 function setText(el, txt) {
@@ -1321,26 +1408,23 @@ function setClass(el, cls) {
 }
 
 const MENU_ROWS = [
-  { key: 'players', values: [1, 2] },
   { key: 'mode', values: ['day', 'night'] },
   { key: 'lang', values: LANGS },
   { key: 'action', get values() { return isDesktop ? ['start', 'options', 'exit'] : ['start', 'options']; } }
 ];
-const menu = { row: 0, players: 1, mode: 'day', lang, action: 'start' };
+const menu = { row: 0, mode: 'day', lang, action: 'start' };
+const ACTION_ROW = 2;   // az alsó gombsor (START / OPTIONS / EXIT) sorszáma
 
 function refreshMenu() {
   ui.menuRows.forEach((r, i) => r.classList.toggle('active', i === menu.row));
-  ui.opts.forEach((b) => {
-    const val = b.dataset.row === 'players' ? Number(b.dataset.value) : b.dataset.value;
-    b.classList.toggle('selected', menu[b.dataset.row] === val);
-  });
-  ui.actBtns.forEach((b) => b.classList.toggle('selected', menu.row === 3 && b.dataset.act === menu.action));
-  ui.menuDesc.textContent = `${t('desc_' + menu.players)} ${t('desc_' + menu.mode)}`;
+  ui.opts.forEach((b) => b.classList.toggle('selected', menu[b.dataset.row] === b.dataset.value));
+  ui.actBtns.forEach((b) => b.classList.toggle('selected', menu.row === ACTION_ROW && b.dataset.act === menu.action));
+  ui.menuDesc.textContent = t('desc_' + menu.mode);
 }
 
 function menuMove(d) {
   menu.row = (menu.row + d + MENU_ROWS.length) % MENU_ROWS.length;
-  if (menu.row !== 3) menu.action = 'start';
+  if (menu.row !== ACTION_ROW) menu.action = 'start';
   refreshMenu();
   Sound.select();
 }
@@ -1357,11 +1441,15 @@ function menuSet(key, value) {
   Sound.select();
 }
 
-// ENTER / A gomb a főmenüben: az alsó gombsoron a kijelölt gomb, máshol START
-function menuConfirm() {
-  if (menu.row === 3 && menu.action === 'options') openOptions('start');
-  else if (menu.row === 3 && menu.action === 'exit') exitGame();
-  else startGame();
+// ENTER / A gomb a főmenüben: az alsó gombsoron a kijelölt gomb, máshol START.
+// A START a csatlakozó képernyőre visz, és aki megnyomta, rögtön P1 lesz.
+function menuConfirm(device = null) {
+  if (menu.row === ACTION_ROW && menu.action === 'options') openOptions('start');
+  else if (menu.row === ACTION_ROW && menu.action === 'exit') exitGame();
+  else {
+    joined = [];
+    openJoin(device);
+  }
 }
 
 // Balra/jobbra lépteti az aktív menüsor értékét
@@ -1378,7 +1466,7 @@ ui.opts.forEach((btn) => {
     Sound.init();
     const key = btn.dataset.row;
     menu.row = MENU_ROWS.findIndex((r) => r.key === key);
-    menuSet(key, key === 'players' ? Number(btn.dataset.value) : btn.dataset.value);
+    menuSet(key, btn.dataset.value);
   });
 });
 
@@ -1582,7 +1670,7 @@ ui.btnOptBack.addEventListener('click', (e) => {
 ui.btnStart.addEventListener('click', (e) => {
   e.currentTarget.blur();
   Sound.init();
-  if (game.state === 'start' && !optionsOpen) startGame();
+  if (game.state === 'start' && !optionsOpen) menuConfirm(null);
 });
 
 ui.btnAgain.addEventListener('click', (e) => {
@@ -1593,7 +1681,7 @@ ui.btnAgain.addEventListener('click', (e) => {
 
 ui.btnMenu.addEventListener('click', (e) => {
   e.currentTarget.blur();
-  if (game.state === 'gameover') showMenu();
+  if (game.state === 'gameover') openJoin();
 });
 
 let lastPadCount = -1;
@@ -1718,7 +1806,7 @@ function speedFactor() {
 
 function maxFish() {
   let base = game.mode === 'night' ? CONFIG.MAX_FISH_NIGHT : CONFIG.MAX_FISH_DAY;
-  if (game.numPlayers === 2 && game.state !== 'start') base += 3;   // két horog, több hal
+  if (game.state !== 'start') base += 3 * (game.numPlayers - 1);   // több horog, több hal
   if (game.event && game.event.type === 'frenzy') base += CONFIG.FRENZY_EXTRA_FISH;
   return base;
 }
@@ -2131,7 +2219,7 @@ function snapLine(p) {
   const hk = p.hook;
   releaseFish(p);
   hk.state = 'reset';
-  addBanner(game.numPlayers === 2 ? t('ban_snap_p', { p: pLabel(p.index) }) : t('ban_snap'), 1.4, '#ff4a4a', true);
+  addBanner(game.numPlayers > 1 ? t('ban_snap_p', { p: playerName(p.index) }) : t('ban_snap'), 1.4, '#ff4a4a', true);
   for (let i = 0; i < 8; i++) {
     addParticle(hk.x, hk.y, rand(-40, 40), rand(-40, 20), rand(0.3, 0.6), '#d4d6de', 60);
   }
@@ -2603,8 +2691,10 @@ function drawBoat(p, r) {
     ctx.fillStyle = Math.sin(game.time * 9 + p.index) > -0.8 ? '#ffe27a' : '#c9a040';
     ctx.fillRect(lx - 1, r.by - 6, 3, 2);
   }
-  if (game.numPlayers === 2) {
-    drawText(ctx, `P${p.index + 1}`, r.px + 4, r.py - 8, 1, p.style.tag, 'center');
+  if (game.numPlayers > 1 || p.name) {
+    const label = p.name || pLabel(p.index);
+    const half = textWidth(label, 1) / 2;
+    drawText(ctx, label, clamp(r.px + 4, half + 1, W - half - 1), r.py - 9, 1, p.style.tag, 'center');
   }
 }
 
@@ -2712,12 +2802,12 @@ function render() {
    18. HUD FRISSÍTÉS
    ========================================================================== */
 function updateHUD() {
-  const p1 = game.players[0];
-  const p2 = game.players[1];
-
-  setText(ui.p1Label, game.numPlayers === 2 ? pLabel(0) : t('hud_score'));
-  setText(ui.p1Score, pad(p1 ? p1.score : 0, 5));
-  if (p2) setText(ui.p2Score, pad(p2.score, 5));
+  setText(ui.p1Label, game.numPlayers > 1 ? playerName(0) : t('hud_score'));
+  for (let i = 1; i < 4; i++) if (game.players[i]) setText(ui.hudLabels[i], playerName(i));
+  ui.scores.forEach((el, i) => {
+    const p = game.players[i];
+    if (p || i === 0) setText(el, pad(p ? p.score : 0, 5));
+  });
   setText(ui.round, pad(game.level, 2));
   setText(ui.target, pad(game.target, 4));
   const reached = game.players.some((p) => p.roundScore >= game.target);
@@ -2737,6 +2827,7 @@ function updateHUD() {
 function updatePanel(pn, p) {
   const hk = p.hook;
   const f = hk.fish;
+  setText(pn.tag, p.name || pLabel(p.index));
 
   setText(pn.depth, pad(Math.round(yToDepthFrac(hk.y) * CONFIG.MAX_DEPTH_METERS), 2));
   setText(pn.fish, pad(p.caught, 2));
@@ -2784,7 +2875,7 @@ function setState(s) {
 }
 
 function resetPlayerHook(p) {
-  const x = game.numPlayers === 1 ? W / 2 : (p.index === 0 ? W * 0.3 : W * 0.7);
+  const x = startXFor(p.index, game.numPlayers);
   releaseFish(p);
   p.hook.x = x;
   p.hook.y = HOOK_MIN_Y + 30;
@@ -2795,11 +2886,15 @@ function resetPlayerHook(p) {
 }
 
 function startGame() {
-  game.numPlayers = menu.players;
+  if (!joined.length) joined = ['kbR'];
+  game.numPlayers = joined.length;
   game.mode = menu.mode;
-  document.body.classList.toggle('two-player', game.numPlayers === 2);
-  game.players = [];
-  for (let i = 0; i < game.numPlayers; i++) game.players.push(makePlayer(i, game.numPlayers));
+  setPlayerCount(game.numPlayers);
+  game.players = joined.map((dev, i) => {
+    const p = makePlayer(i, game.numPlayers, dev);
+    p.name = nameOf(dev);
+    return p;
+  });
   effects.particles = [];
   effects.bubbles = [];
   effects.popups = [];
@@ -2809,6 +2904,7 @@ function startGame() {
   ui.startScreen.classList.add('hidden');
   ui.gameoverScreen.classList.add('hidden');
   ui.pauseScreen.classList.add('hidden');
+  ui.joinScreen.classList.add('hidden');
   Music.setDuck(1);
   Music.play(game.mode);         // nappali vagy éjszakai zenék
   setState('playing');
@@ -2856,8 +2952,8 @@ function roundClear(winner) {
   if (game.predator) predatorLeave(game.predator);
   game.event = null;
   effects.banners = [];
-  addBanner(game.numPlayers === 2
-    ? t('ban_winround', { p: pLabel(winner.index), n: game.level })
+  addBanner(game.numPlayers > 1
+    ? t('ban_winround', { p: playerName(winner.index), n: game.level })
     : t('ban_clear', { n: game.level }), 1.8, winner.style.tag, true);
   addBanner(t('ban_bonus', { n: bonus }), 1.4, '#6cf06c', false);
   game.clearTimer = 3.4;
@@ -2901,8 +2997,8 @@ function updateTimer(dt) {
 }
 
 function logHtml(p) {
-  const cls = p.index === 0 ? 'p1c' : 'p2c';
-  const title = game.numPlayers === 2 ? t('log_title_p', { p: pLabel(p.index) }) : t('log_title');
+  const cls = 'p' + (p.index + 1) + 'c';
+  const title = game.numPlayers > 1 ? t('log_title_p', { p: playerName(p.index) }) : t('log_title');
   const items = p.log.slice().reverse().map((c) =>
     `<li><span class="${cls}">${c.nick}</span> - ${c.species} ${c.weight.toFixed(2)}KG +${c.pts}</li>`
   ).join('');
@@ -2921,17 +3017,20 @@ function endGame() {
   setState('gameover');
 
   const ps = game.players;
-  const two = game.numPlayers === 2;
+  const two = game.numPlayers > 1;   // több játékos (versus)
 
-  // Cím és győztes
+  // Cím és győztes: több megnyert kör, egyenlőségnél több pont
   ui.goTitle.className = 'go-title';
+  ui.goTitle.style.color = '';
   if (two) {
-    const [a, b] = ps;
-    let winner = null;
-    if (a.roundWins !== b.roundWins) winner = a.roundWins > b.roundWins ? a : b;
-    else if (a.score !== b.score) winner = a.score > b.score ? a : b;
-    ui.goTitle.textContent = winner ? t('go_wins', { p: pLabel(winner.index) }) : t('go_draw');
-    if (winner) ui.goTitle.classList.add(winner.index === 0 ? 'p1win' : 'p2win');
+    const ranked = ps.slice().sort((a, b) => (b.roundWins - a.roundWins) || (b.score - a.score));
+    const best = ranked[0];
+    const tie = ranked[1] && ranked[1].roundWins === best.roundWins && ranked[1].score === best.score;
+    ui.goTitle.textContent = tie ? t('go_draw') : t('go_wins', { p: playerName(best.index) });
+    if (!tie) {
+      ui.goTitle.classList.add('winner');
+      ui.goTitle.style.color = best.style.tag;
+    }
   } else {
     ui.goTitle.textContent = t('go_timeup');
   }
@@ -2949,7 +3048,7 @@ function endGame() {
   ];
   if (two) rows.splice(1, 0, [t('stat_rounds'), (p) => pad(p.roundWins, 2)]);
 
-  let html = two ? `<tr><th></th><th class="c1">${pLabel(0)}</th><th class="c2">${pLabel(1)}</th></tr>` : '';
+  let html = two ? `<tr><th></th>${ps.map((p, i) => `<th class="c${i + 1}">${playerName(i)}</th>`).join('')}</tr>` : '';
   for (const [label, fn] of rows) {
     html += `<tr><td>${label}</td>${ps.map((p, i) => `<td class="c${i + 1}">${fn(p)}</td>`).join('')}</tr>`;
   }
@@ -2979,10 +3078,12 @@ function endGame() {
 
 function showMenu() {
   setState('start');
+  joined = [];
   ui.gameoverScreen.classList.add('hidden');
   ui.pauseScreen.classList.add('hidden');
+  ui.joinScreen.classList.add('hidden');
   ui.startScreen.classList.remove('hidden');
-  document.body.classList.remove('two-player');
+  setPlayerCount(1);
   Music.setDuck(1);
   Music.play('menu');
   menu.row = 0;
@@ -3006,6 +3107,209 @@ function setupAttract() {
   populate();
   refreshMenu();
 }
+
+
+/* ==========================================================================
+   19/A. CSATLAKOZÓ KÉPERNYŐ ("PRESS TO JOIN")
+   Aki először nyom gombot, az P1 lesz, a következő (másik eszközön) P2.
+   Belépés: nyilas oldal SPACE / ENTER, WASD oldal F / G, kontroller A / START.
+   ========================================================================== */
+let joined = [];          // a belépett eszközök sorrendben (0 = P1, 1 = P2)
+
+// --- Játékosnevek: eszközönként megjegyezve (legközelebb is ugyanaz a név jön fel)
+const playerNames = Store.get('names', {});
+
+const NAME_PARTS = {
+  en: {
+    a: ['SALTY', 'SOGGY', 'LUCKY', 'SIR', 'CAPTAIN', 'MIGHTY', 'SLEEPY', 'FUNKY', 'GRUMPY', 'TINY', 'BIG', 'WET',
+      'SNEAKY', 'DIZZY', 'FISHY', 'OLD', 'LORD', 'SLIMY'],
+    b: ['WORM', 'BAIT', 'HOOK', 'PIKE', 'CARP', 'TUNA', 'GUPPY', 'BUBBLE', 'NOODLE', 'PICKLE', 'SQUID', 'BOOT',
+      'SPLASH', 'REEL', 'WADERS', 'FLOAT', 'KRILL', 'COD']
+  },
+  fr: {
+    a: ['PAPY', 'TONTON', 'SIRE', 'ROI', 'MAÎTRE', "P'TIT", 'GROS', 'VIEUX', 'SUPER', 'DOC', 'CHEF', 'BARON'],
+    b: ['VER', 'THON', 'CARPE', 'BULLE', 'GOUJON', 'ASTICOT', 'BROCHET', 'CALMAR', 'HAMEÇON', 'BOTTE', 'MORUE', 'SPRAT']
+  }
+};
+
+// Vicces véletlen név (belefér a maximális hosszba)
+function randomName() {
+  const parts = NAME_PARTS[lang] || NAME_PARTS.en;
+  for (let i = 0; i < 40; i++) {
+    const name = `${choice(parts.a)} ${choice(parts.b)}`;
+    if (name.length <= CONFIG.MAX_NAME_LEN) return name;
+  }
+  return choice(parts.b);
+}
+
+// Csak a pixelfontban meglévő karakterek maradnak, nagybetűvel
+function cleanName(str) {
+  return String(str).toUpperCase()
+    .split('').filter((ch) => ch === ' ' || FONT[ch] || ACCENTED[ch]).join('')
+    .replace(/\s+/g, ' ')
+    .slice(0, CONFIG.MAX_NAME_LEN);
+}
+
+function nameOf(dev) {
+  if (!playerNames[dev]) {
+    playerNames[dev] = randomName();
+    Store.set('names', playerNames);
+  }
+  return playerNames[dev];
+}
+
+function setName(dev, name) {
+  playerNames[dev] = name;
+  Store.set('names', playerNames);
+  refreshJoin();
+}
+
+function rerollName(dev) {
+  setName(dev, randomName());
+  Sound.select();
+}
+
+// A játékos névmezőjének kijelölése (billentyűzeten gépelhető)
+function editName(dev) {
+  const i = joined.indexOf(dev);
+  const input = ui.joinSlots[i] && ui.joinSlots[i].querySelector('.slot-name');
+  if (!input) return;
+  input.focus();
+  if (input.select) input.select();
+}
+
+function deviceLabel(dev) {
+  if (dev === 'kbR') return t('dev_kbR');
+  if (dev === 'kbL') return t('dev_kbL');
+  return t('dev_pad', { n: Number(dev.slice(3)) + 1 });
+}
+
+function openJoin(device = null) {
+  if (game.state === 'gameover' || game.state === 'paused') {
+    // új meccs előtti "attract" háttér
+    game.predator = null;
+    game.event = null;
+    effects.banners = [];
+    for (const p of game.players) releaseFish(p);
+  }
+  ui.startScreen.classList.add('hidden');
+  ui.gameoverScreen.classList.add('hidden');
+  ui.pauseScreen.classList.add('hidden');
+  ui.joinScreen.classList.remove('hidden');
+  setState('join');
+  Music.setDuck(1);
+  Music.play('menu');
+  if (device) joinDevice(device, true);
+  refreshJoin();
+}
+
+function joinDevice(dev, silent = false) {
+  if (!dev || joined.includes(dev) || joined.length >= CONFIG.MAX_LOCAL_PLAYERS) return;
+  joined.push(dev);
+  if (!silent) Sound.bite();
+  refreshJoin();
+}
+
+function leaveDevice(dev) {
+  const i = joined.indexOf(dev);
+  if (i < 0) return;
+  joined.splice(i, 1);
+  Sound.select();
+  refreshJoin();
+}
+
+// ESC a csatlakozó képernyőn: előbb a billentyűzetes játékosok lépnek ki, aztán vissza a menübe
+function joinEscape() {
+  const kb = joined.filter((d) => KB_DEVICES.includes(d));
+  if (kb.length) {
+    joined = joined.filter((d) => !KB_DEVICES.includes(d));
+    Sound.select();
+    refreshJoin();
+  } else {
+    showMenu();
+  }
+}
+
+// A csatlakozó helyen kirajzolja a játékos saját színű horgászát és csónakját
+function drawSlotPreview(cv, index, active) {
+  if (!cv || !cv.getContext) return;
+  const g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, cv.width, cv.height);
+  const st = PLAYER_STYLE[index];
+  g.globalAlpha = active ? 1 : 0.25;
+  g.fillStyle = '#1b6c9d';
+  g.fillRect(0, 13, cv.width, 3);                       // víz
+  g.drawImage(st.person, 11, 2);                        // horgász
+  g.drawImage(st.boat, 2, 10);                          // csónak
+  g.fillStyle = '#6b4220';
+  g.fillRect(17, 2, 1, 5);                              // bot
+  g.fillRect(18, 1, 1, 2);
+  g.fillRect(19, 0, 1, 2);
+  g.globalAlpha = 1;
+}
+
+function refreshJoin() {
+  ui.joinSlots.forEach((slot, i) => {
+    const dev = joined[i];
+    slot.classList.toggle('filled', !!dev);
+    slot.querySelector('.slot-text').textContent = dev ? deviceLabel(dev) : t('join_empty');
+    const input = slot.querySelector('.slot-name');
+    if (input && document.activeElement !== input) input.value = dev ? nameOf(dev) : '';
+    drawSlotPreview(slot.querySelector('.slot-preview'), i, !!dev);
+  });
+  ui.joinMode.textContent = joined.length === 0 ? '' : (joined.length === 1 ? t('join_solo') : t('join_versus', { n: joined.length }));
+  ui.btnJoinPlay.disabled = joined.length === 0;
+
+  // előnézet: a belépett játékosok csónakjai már látszanak
+  const n = Math.max(1, joined.length);
+  game.numPlayers = n;
+  setPlayerCount(n);
+  const same = game.players.length === n && game.players.every((p, i) => p.device === (joined[i] || null));
+  if (!same) game.players = joined.length ? joined.map((d, i) => makePlayer(i, n, d)) : [makePlayer(0, 1)];
+  game.players.forEach((p, i) => { p.name = joined[i] ? nameOf(joined[i]) : ''; });
+  scheduleFit();
+}
+
+// Névmezők és kocka-gombok a csatlakozó helyeken
+ui.joinSlots.forEach((slot, i) => {
+  const input = slot.querySelector('.slot-name');
+  const dice = slot.querySelector('.slot-dice');
+  if (input) {
+    input.maxLength = CONFIG.MAX_NAME_LEN;
+    input.addEventListener('input', () => {
+      const dev = joined[i];
+      if (!dev) return;
+      const clean = cleanName(input.value);
+      if (input.value !== clean) input.value = clean;
+      playerNames[dev] = clean;
+      game.players.forEach((p, k) => { if (joined[k]) p.name = nameOf(joined[k]); });
+    });
+    input.addEventListener('blur', () => {
+      const dev = joined[i];
+      if (!dev) return;
+      const clean = cleanName(input.value).trim();
+      setName(dev, clean || randomName());   // üresen hagyva véletlen nevet kap
+    });
+  }
+  if (dice) {
+    dice.addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      if (joined[i]) rerollName(joined[i]);
+    });
+  }
+});
+
+ui.btnJoinPlay.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  Sound.init();
+  if (game.state === 'join' && joined.length) startGame();
+});
+
+ui.btnJoinBack.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  if (game.state === 'join') showMenu();
+});
 
 
 /* ==========================================================================
