@@ -704,3 +704,60 @@ body.touch-landscape .touch-pause { top: max(10px, env(safe-area-inset-top)); ri
   .touch-btn.reel { width: 90px; height: 90px; }
   .touch-btn.tug { width: 64px; height: 64px; margin-bottom: 34px; }
 }
+
+/* ---------- v14: meccs hossza, korona ---------- */
+.rounds-row { border-color: var(--border); }
+.round-opt { min-width: 2.6em; padding: 0.2em 0.6em; }
+.round-opt.selected { background: var(--amber); color: #000; border-color: #fff; }
+.round-opt:disabled { cursor: default; }
+.round-opt:disabled:not(.selected) { opacity: 0.4; }
+
+.join-slot.crowned .tag::before { content: "\265B  "; color: #ffd23f; }
+.join-slot.crowned { box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.55) !important; }
+
+/* ---------- v15: kártyák ---------- */
+.card-screen { background: rgba(3, 5, 14, 0.9); }
+.card-title {
+  font-size: clamp(16px, 3.2vw, 34px);
+  letter-spacing: 0.12em;
+  text-shadow: 3px 3px 0 #000;
+}
+.card-note { color: var(--amber); min-height: 1.2em; }
+
+.card-row { display: flex; gap: clamp(8px, 1.6vw, 20px); justify-content: center; flex-wrap: wrap; }
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5em;
+  width: clamp(120px, 17vw, 210px);
+  min-height: clamp(150px, 21vw, 270px);
+  padding: 0.8em 0.6em;
+  font-size: clamp(9px, 1.15vw, 13px);
+  text-transform: uppercase;
+  line-height: 1.35;
+  background: #0d1424;
+  border-width: 4px;
+  box-shadow: 6px 6px 0 #000;
+  transition: transform 0.08s;
+}
+.card:disabled { cursor: default; }
+.card.curse { border-color: var(--red); }
+.card.boon { border-color: var(--green); }
+.card.global { border-color: var(--sea); }
+.card.selected { transform: translateY(-8px) scale(1.04); background: #16213a; outline: 3px solid #fff; }
+.card:hover:not(:disabled) { background: #16213a; color: var(--text); }
+.card-type { font-size: 0.85em; }
+.card.curse .card-type { color: var(--red); }
+.card.boon .card-type { color: var(--green); }
+.card.global .card-type { color: var(--sea); }
+.card-icon { font-size: 3em; line-height: 1.1; }
+.card-name { color: var(--amber); font-size: 1.15em; }
+.card-desc { color: var(--dim); font-size: 0.85em; }
+
+.card-targets { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.card-target { border-width: 3px; }
+.card-target.selected { background: var(--red); color: #fff; outline: 3px solid #fff; }
+
+.panel-cards { grid-column: 1 / -1; font-size: 0.85em; min-height: 0; line-height: 1.4; }
+.panel-cards:empty { display: none; }
