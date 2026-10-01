@@ -1,7 +1,7 @@
 'use strict';
 
 /* ==========================================================================
-   DEEP LINE — retro arcade horgászverseny (v4)
+   DEEP LINE — retro arcade horgászverseny (v19)
    HTML5 Canvas + vanilla JavaScript, külső függőségek és képfájlok nélkül.
 
    Újdonságok a v2-ben:
