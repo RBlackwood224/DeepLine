@@ -40,7 +40,17 @@
    v14:
      - versus meccs 3 / 5 / 7 körből, győztes koronával (a szobában is látszik)
    v15:
-     - kártyák a körök között: 24 kártya (átok / előny / mindenkire), igazságossági szabályokkal
+     - kártyák a körök között: 24 kártya (átok / előny / mindenkire)
+   v16:
+     - a kártyát a LEGHÁTUL ÁLLÓ választja (felzárkózás), átkot csak az előtte állókra tehet
+     - telefonon nem ugrál a kép, amikor a böngésző címsora eltűnik / megjelenik
+   v17:
+     - halak pontjai és bónuszideje újrahangolva (nehezebb / mélyebb = többet ér)
+   v18:
+     - HALPAKLI: 11 különleges faj (köztük 7 új, saját képességgel) érkezik véletlen sorrendben
+   v19:
+     - kötélhúzás (halrablás), halom a csónakban, sirály, mystery box, palack, Golden Hour,
+       vihar, kraken, díjak a meccs végén
      - OPTIONS menü: külön zene- és effekt-hangerő (mentve)
      - nyelvek: English (alap) / Français
 
@@ -74,6 +84,22 @@
 const CONFIG = {
   // --- Körök és szintek ---
   MUSIC_MASTER: 0.8,            // a zene teljes erejének szorzója (0.8 = 20%-kal halkabb); kisebb = halkabb
+
+  // --- csatározás és események
+  STEAL_COOLDOWN: 8,            // rablási kísérlet után ennyi mp-ig nem próbálkozhat újra
+  TUG_TIME: 3,                  // a kötélhúzás hossza (mp)
+  TUG_OWNER_BONUS: 1.2,         // a hal gazdájának gombnyomásai ennyivel többet érnek
+  SEAGULL_CHANCE: 0.3,          // ennyi eséllyel jön sirály, amikor egy hal a felszínhez ér
+  SEAGULL_TIME: 1.5,            // ennyi idő alatt ér oda a sirály
+  SEAGULL_SHOO: 6,              // ennyi gombnyomással lehet elhessegetni
+  PILE_SLOWDOWN: 0.08,          // minden hal a csónakban ennyivel lassítja a csónakot
+  PILE_MIN: 0.35,               // ennél lassabb nem lesz
+  ITEM_CHANCE: 0.01,            // mystery box / palack esélye spawn-próbánként
+  GOLDEN_TIME: 15,              // Golden Hour hossza (mp) – dupla pont mindenkinek
+  STORM_TIME: 15,               // vihar hossza (mp)
+  KRAKEN_TIME: 7,               // ennyi ideje van mindenkinek elűzni a krakent
+  KRAKEN_NEED_BASE: 10,         // ennyi + játékosonként KRAKEN_NEED_PER gombnyomás kell
+  KRAKEN_NEED_PER: 6,
 
   MATCH_ROUND_OPTIONS: [3, 5, 7],   // választható meccshossz versusban (körök)
   VOTE_TIME: 20,                // ennyi mp-ig tart egy kirúgás-szavazás
@@ -244,11 +270,10 @@ const I18N = {
     card_time_crunch: "TIME CRUNCH", cardd_time_crunch: "HALF THE BONUS TIME FOR CATCHES",
     card_curse: "CURSE", card_boon: "BOON", card_global: "EVERYONE",
     card_pick_title: "{p}, PICK A CARD!", card_waiting: "{p} IS CHOOSING A CARD...",
-    card_target_title: "WHO GETS THE CURSE?", card_note_leader: "YOU LEAD THE MATCH - NO BOONS FOR YOU",
-    card_note_streak: "WINNING STREAK - CURSES ONLY", card_time: "AUTO PICK IN {n}",
+    card_target_title: "WHO GETS THE CURSE?", 
+    card_note_last: "LAST PLACE GETS THE CARD - CATCH UP!", card_time: "AUTO PICK IN {n}",
     card_keys: `←→ CHOOSE${GAP}ENTER / F / A: PICK${GAP}BACKSPACE / G / B: BACK`,
     card_applied_curse: "{p} CURSED {t}", card_applied_boon: "{p} TOOK", card_applied_global: "{p} PLAYED",
-    card_comeback: "COMEBACK BOOST FOR {p}",
     rounds_label: "MATCH ROUNDS ←→", ban_round_of: "ROUND {n}/{m}", ban_final: "FINAL ROUND!",
     ban_round_draw: "ROUND DRAW!", ban_timeup: "TIME UP!", go_match_win: "{p} WINS THE MATCH!",
     go_sub_match: "{n} ROUND MATCH - {shift}",
@@ -313,7 +338,23 @@ const I18N = {
     btn_back: "BACK", opt_hint: `↑↓ SELECT${GAP}←→ ADJUST${GAP}ESC BACK`,
     fish_minnow: "MINNOW", fish_perch: "PERCH", fish_puffer: "PUFFER", fish_bass: "BASS",
     fish_needle: "NEEDLEFISH", fish_eel: "EEL", fish_squid: "GLOW SQUID", fish_angler: "ANGLER",
-    fish_goldfin: "GOLDFIN", fish_koi: "CRYSTAL KOI", fish_oldone: "THE OLD ONE"
+    fish_goldfin: "GOLDFIN", fish_koi: "CRYSTAL KOI", fish_oldone: "THE OLD ONE",
+    fish_piranha: "PIRANHA", fish_flying: "FLYING FISH", fish_zapper: "ELECTRIC EEL", fish_octopus: "OCTOPUS",
+    fish_ghost: "GHOST FISH", fish_swordfish: "SWORDFISH", fish_stonefish: "STONEFISH",
+    pop_bait_stolen: "BAIT STOLEN!", pop_rebait: "NEW BAIT", pop_zap: "ZAP!", pop_line_cut: "LINE CUT!",
+    fish_crate: "MYSTERY BOX", fish_bottle: "BOTTLE",
+    ban_tug: "TUG OF WAR!", pop_stolen: "STOLEN!", pop_defended: "DEFENDED!", pop_mash: "MASH REEL!",
+    pop_seagull: "SEAGULL!", pop_shoo: "SHOO!", pop_gull_stole: "THE SEAGULL STOLE IT!",
+    item_crate: "MYSTERY BOX!", item_jackpot: "JACKPOT +{n}", item_time: "BONUS TIME +{n}S",
+    item_boot: "JUST AN OLD BOOT...", item_bottle: "MESSAGE IN A BOTTLE:",
+    ban_golden: "GOLDEN HOUR! DOUBLE POINTS", ev_golden: "GOLDEN HOUR", ban_storm: "STORM!", ev_storm: "STORM",
+    ban_kraken: "KRAKEN!", ban_kraken_mash: "EVERYONE MASH REEL!", ban_kraken_win: "KRAKEN DEFEATED!",
+    ban_kraken_lose: "THE KRAKEN TOOK IT!",
+    aw_title: "AWARDS", aw_hint: "ENTER / A: SKIP",
+    aw_big: "BIG CATCH", aw_shark: "SHARK'S FAVOURITE SNACK", aw_butter: "BUTTERFINGERS",
+    aw_gull: "SEAGULL'S BEST FRIEND", aw_thief: "MASTER THIEF", aw_treasure: "TREASURE HUNTER",
+    aw_patient: "THE PATIENT ONE", aw_v_times: "{n}X", aw_v_secs: "{n} SEC", aw_v_kg: "{n} KG",
+    no_bait: "NO BAIT - REEL UP TO THE SURFACE"
   },
 
   fr: {
@@ -359,11 +400,10 @@ const I18N = {
     card_time_crunch: "COURSE CONTRE LA MONTRE", cardd_time_crunch: "MOITIÉ MOINS DE TEMPS BONUS",
     card_curse: "MALÉDICTION", card_boon: "BONUS", card_global: "POUR TOUS",
     card_pick_title: "{p}, CHOISIS UNE CARTE !", card_waiting: "{p} CHOISIT UNE CARTE...",
-    card_target_title: "QUI SUBIT LA MALÉDICTION ?", card_note_leader: "TU MÈNES - PAS DE BONUS POUR TOI",
-    card_note_streak: "SÉRIE DE VICTOIRES - MALÉDICTIONS SEULEMENT", card_time: "CHOIX AUTO DANS {n}",
+    card_target_title: "QUI SUBIT LA MALÉDICTION ?", 
+    card_note_last: "LE DERNIER CHOISIT UNE CARTE - RATTRAPE-LES !", card_time: "CHOIX AUTO DANS {n}",
     card_keys: `←→ CHOISIR${GAP}ENTRÉE / F / A : PRENDRE${GAP}RETOUR / G / B : ANNULER`,
     card_applied_curse: "{p} MAUDIT {t}", card_applied_boon: "{p} PREND", card_applied_global: "{p} JOUE",
-    card_comeback: "COUP DE POUCE POUR {p}",
     rounds_label: "MANCHES DU MATCH ←→", ban_round_of: "MANCHE {n}/{m}", ban_final: "DERNIÈRE MANCHE !",
     ban_round_draw: "MANCHE NULLE !", ban_timeup: "TEMPS ÉCOULÉ !", go_match_win: "{p} GAGNE LE MATCH !",
     go_sub_match: "MATCH EN {n} MANCHES - {shift}",
@@ -428,7 +468,23 @@ const I18N = {
     btn_back: "RETOUR", opt_hint: `↑↓ CHOISIR${GAP}←→ RÉGLER${GAP}ÉCHAP RETOUR`,
     fish_minnow: "VAIRON", fish_perch: "PERCHE", fish_puffer: "POISSON-GLOBE", fish_bass: "BAR",
     fish_needle: "ORPHIE", fish_eel: "ANGUILLE", fish_squid: "CALMAR LUMINEUX", fish_angler: "BAUDROIE",
-    fish_goldfin: "POISSON D'OR", fish_koi: "KOÏ DE CRISTAL", fish_oldone: "L'ANCIEN"
+    fish_goldfin: "POISSON D'OR", fish_koi: "KOÏ DE CRISTAL", fish_oldone: "L'ANCIEN",
+    fish_piranha: "PIRANHA", fish_flying: "POISSON VOLANT", fish_zapper: "ANGUILLE ÉLECTRIQUE", fish_octopus: "POULPE",
+    fish_ghost: "POISSON FANTÔME", fish_swordfish: "ESPADON", fish_stonefish: "POISSON-PIERRE",
+    pop_bait_stolen: "APPÂT VOLÉ !", pop_rebait: "NOUVEL APPÂT", pop_zap: "ZAP !", pop_line_cut: "FIL COUPÉ !",
+    fish_crate: "CAISSE MYSTÈRE", fish_bottle: "BOUTEILLE",
+    ban_tug: "TIR À LA CORDE !", pop_stolen: "VOLÉ !", pop_defended: "DÉFENDU !", pop_mash: "MARTÈLE !",
+    pop_seagull: "MOUETTE !", pop_shoo: "OUSTE !", pop_gull_stole: "LA MOUETTE L'A VOLÉ !",
+    item_crate: "CAISSE MYSTÈRE !", item_jackpot: "JACKPOT +{n}", item_time: "TEMPS BONUS +{n}S",
+    item_boot: "JUSTE UNE VIEILLE BOTTE...", item_bottle: "MESSAGE DANS UNE BOUTEILLE :",
+    ban_golden: "HEURE DORÉE ! POINTS X2", ev_golden: "HEURE DORÉE", ban_storm: "TEMPÊTE !", ev_storm: "TEMPÊTE",
+    ban_kraken: "KRAKEN !", ban_kraken_mash: "TOUT LE MONDE MARTÈLE !", ban_kraken_win: "KRAKEN VAINCU !",
+    ban_kraken_lose: "LE KRAKEN L'A PRIS !",
+    aw_title: "RÉCOMPENSES", aw_hint: "ENTRÉE / A : PASSER",
+    aw_big: "LA GROSSE PRISE", aw_shark: "LE CASSE-CROÛTE DU REQUIN", aw_butter: "MAINS DE BEURRE",
+    aw_gull: "LE COPAIN DE LA MOUETTE", aw_thief: "MAÎTRE VOLEUR", aw_treasure: "CHASSEUR DE TRÉSORS",
+    aw_patient: "LE PLUS PATIENT", aw_v_times: "{n}X", aw_v_secs: "{n} S", aw_v_kg: "{n} KG",
+    no_bait: "PLUS D'APPÂT - REMONTE À LA SURFACE"
   }
 };
 
@@ -743,12 +799,12 @@ const HOOK_ROWS = ['..g', '..g', 'g.g', '.g.'];
 
 /* ==========================================================================
    6. HALFAJOK
-   minLevel: ettől a körtől jelenik meg a faj
+   special: különleges faj – a halpakliból érkezik a meccs során (lásd startRound)
    timeBonus: ennyi mp-et ad a kifogása (minél nehezebb, annál többet)
    ========================================================================== */
 const SPECIES = {
   minnow: {
-    name: 'MINNOW', points: 10, timeBonus: 1, rarity: 1, minLevel: 1,
+    name: 'MINNOW', points: 10, timeBonus: 1, rarity: 1,
     depth: [0.03, 0.32], speed: 34, stamina: 15, regen: 2, pull: 6, aggression: 0.3,
     bite: 0.75, weight: [0.05, 0.2],
     motion: { amp: 1, freq: 6, drift: 6, wander: [2, 4], burstMul: 2.2, burstEvery: [1, 2.5], burstLen: 0.3 },
@@ -758,7 +814,7 @@ const SPECIES = {
   },
 
   perch: {
-    name: 'PERCH', points: 20, timeBonus: 2, rarity: 2, minLevel: 1,
+    name: 'PERCH', points: 25, timeBonus: 2, rarity: 2,
     depth: [0.12, 0.6], speed: 24, stamina: 35, regen: 4, pull: 10, aggression: 0.5,
     bite: 0.6, weight: [0.3, 1.2],
     motion: { amp: 3, freq: 2, drift: 4, wander: [3, 5], burstMul: 1.6, burstEvery: [3, 6], burstLen: 0.4 },
@@ -768,7 +824,7 @@ const SPECIES = {
   },
 
   puffer: {
-    name: 'PUFFER', points: 30, timeBonus: 3, rarity: 3, minLevel: 2,
+    name: 'PUFFER', points: 30, timeBonus: 3, rarity: 3, special: true,
     depth: [0.1, 0.55], speed: 14, stamina: 50, regen: 5, pull: 9, aggression: 0.6,
     bite: 0.55, weight: [0.5, 2.0],
     motion: { amp: 2, freq: 1.5, drift: 5, wander: [3, 6] },
@@ -778,7 +834,7 @@ const SPECIES = {
   },
 
   bass: {
-    name: 'BASS', points: 40, timeBonus: 4, rarity: 4, minLevel: 1,
+    name: 'BASS', points: 45, timeBonus: 4, rarity: 4,
     depth: [0.33, 0.68], speed: 20, stamina: 55, regen: 4, pull: 11, aggression: 0.8,
     bite: 0.55, weight: [1.5, 4.0],
     motion: { amp: 1.5, freq: 1.2, drift: 8, wander: [2, 4], burstMul: 2.8, burstEvery: [2.5, 5], burstLen: 0.5 },
@@ -796,7 +852,7 @@ const SPECIES = {
   },
 
   needle: {
-    name: 'NEEDLEFISH', points: 60, timeBonus: 5, rarity: 5, minLevel: 3,
+    name: 'NEEDLEFISH', points: 55, timeBonus: 5, rarity: 5, special: true,
     depth: [0.25, 0.7], speed: 40, stamina: 60, regen: 4, pull: 10, aggression: 1.0,
     bite: 0.5, weight: [0.8, 2.5],
     motion: { amp: 1, freq: 3, drift: 12, wander: [1, 2.5], burstMul: 3, burstEvery: [1.2, 2.5], burstLen: 0.35 },
@@ -806,7 +862,7 @@ const SPECIES = {
   },
 
   eel: {
-    name: 'EEL', points: 50, timeBonus: 5, rarity: 6, minLevel: 1,
+    name: 'EEL', points: 70, timeBonus: 6, rarity: 6,
     depth: [0.48, 0.95], speed: 22, stamina: 65, regen: 4, pull: 11, aggression: 0.9,
     bite: 0.5, weight: [1.0, 3.5],
     motion: { amp: 6, freq: 3, drift: 10, wander: [1.5, 3], turnEvery: [1.5, 3.5], turnChance: 0.45 },
@@ -817,7 +873,7 @@ const SPECIES = {
   },
 
   squid: {
-    name: 'GLOW SQUID', points: 90, timeBonus: 7, rarity: 7, minLevel: 4,
+    name: 'GLOW SQUID', points: 90, timeBonus: 7, rarity: 7, special: true,
     depth: [0.6, 0.96], speed: 16, stamina: 80, regen: 5, pull: 12, aggression: 1.0,
     bite: 0.45, weight: [2, 6],
     motion: { amp: 3, freq: 2, drift: 8, wander: [1.5, 3], burstMul: 3.5, burstEvery: [1, 2], burstLen: 0.25,
@@ -829,7 +885,7 @@ const SPECIES = {
   },
 
   angler: {
-    name: 'ANGLER', points: 80, timeBonus: 8, rarity: 8, minLevel: 1,
+    name: 'ANGLER', points: 110, timeBonus: 9, rarity: 8,
     depth: [0.68, 0.97], speed: 12, stamina: 90, regen: 5, pull: 13, aggression: 1.0,
     bite: 0.5, weight: [5, 14],
     motion: { amp: 2, freq: 1, drift: 3, wander: [4, 7], burstMul: 3.2, burstEvery: [4, 8], burstLen: 0.4 },
@@ -849,7 +905,7 @@ const SPECIES = {
   },
 
   goldfin: {
-    name: 'GOLDFIN', points: 150, timeBonus: 6, rarity: 9, minLevel: 1, rare: true,
+    name: 'GOLDFIN', points: 150, timeBonus: 8, rarity: 9, rare: true,
     depth: [0.05, 0.95], speed: 48, stamina: 50, regen: 4, pull: 11, aggression: 0.9,
     bite: 0.3, weight: [0.4, 0.9],
     motion: { amp: 2, freq: 5, drift: 22, wander: [0.6, 1.2], burstMul: 1.8, burstEvery: [1, 2], burstLen: 0.3 },
@@ -860,7 +916,7 @@ const SPECIES = {
   },
 
   koi: {
-    name: 'CRYSTAL KOI', points: 200, timeBonus: 8, rarity: 10, minLevel: 5, rare: true,
+    name: 'CRYSTAL KOI', points: 200, timeBonus: 10, rarity: 10, special: true, rare: true,
     depth: [0.1, 0.8], speed: 30, stamina: 70, regen: 5, pull: 11, aggression: 0.9,
     bite: 0.3, weight: [1, 3],
     motion: { amp: 2, freq: 2, drift: 10, wander: [1, 2] },
@@ -870,8 +926,126 @@ const SPECIES = {
     colors: { a: '#f4f4ff', b: '#ff5a3a', d: '#b8c8ff', c: '#b8c8ff', e: '#101010' }
   },
 
+  // ---------- ÚJ, KÜLÖNLEGES HALAK (a halpakliból érkeznek a meccs során) ----------
+  piranha: {
+    name: 'PIRANHA', points: 15, timeBonus: 1, rarity: 2, special: true,
+    depth: [0.08, 0.45], speed: 36, stamina: 20, regen: 3, pull: 7, aggression: 0.9,
+    bite: 0.75, weight: [0.2, 0.8],
+    motion: { amp: 1.5, freq: 5, drift: 10, wander: [1, 2], burstMul: 2.5, burstEvery: [0.8, 1.6], burstLen: 0.25 },
+    school: 3,          // rajban jön (3 együtt)
+    baitThief: 0.5,     // kapáskor 50% eséllyel csak lecsipkedi a csalit
+    spawnDay: 8, spawnNight: 8,
+    rows: ['...ddd..', 'c.aaaaa.', 'ccaaaaew', 'c.abbbb.', '...aa...'],
+    colors: { a: '#5a6b7a', b: '#e0302a', d: '#3a4652', c: '#3a4652', e: '#ffeb3b', w: '#ffffff' }
+  },
+
+  flying: {
+    name: 'FLYING FISH', points: 25, timeBonus: 2, rarity: 3, special: true,
+    depth: [0.03, 0.12], speed: 40, stamina: 30, regen: 3, pull: 8, aggression: 0.8,
+    bite: 0.6, weight: [0.3, 1.0],
+    motion: { amp: 1, freq: 4, drift: 8, wander: [1, 2], leapEvery: [2, 4] },   // ki-kiugrik a vízből
+    leaper: true,
+    spawnDay: 8, spawnNight: 5,
+    rows: ['...ff......', '..fff......', 'c.aaaaaaaea', 'ccaaaaaaaa.', '..fff......'],
+    colors: { a: '#4fa3e0', f: '#bfe8ff', c: '#2f6f9f', e: '#101010' }
+  },
+
+  zapper: {
+    name: 'ELECTRIC EEL', points: 90, timeBonus: 7, rarity: 6, special: true,
+    depth: [0.5, 0.9], speed: 22, stamina: 70, regen: 4, pull: 12, aggression: 1.0,
+    bite: 0.5, weight: [2, 5],
+    motion: { amp: 5, freq: 3, drift: 9, wander: [1.5, 3], turnEvery: [2, 4], turnChance: 0.4 },
+    wiggle: 1,
+    zapper: true,       // horgon néha áramot ad: hirtelen nő a feszülés
+    spawnDay: 6, spawnNight: 9,
+    rows: ['...yyyyyyyyyyyyyy...', 'caaaaaaaaaaaaaaaaaea', '..aaaaaaaaaaaaaaaa..'],
+    colors: { a: '#2d4a6e', y: '#ffe14a', c: '#ffe14a', e: '#ffffff' }
+  },
+
+  octopus: {
+    name: 'OCTOPUS', points: 140, timeBonus: 10, rarity: 8, special: true,
+    depth: [0.72, 0.96], speed: 12, stamina: 95, regen: 5, pull: 14, aggression: 1.0,
+    bite: 0.5, weight: [3, 9],
+    motion: { amp: 3, freq: 1.2, drift: 5, wander: [2, 4], burstMul: 2.5, burstEvery: [3, 5], burstLen: 0.5 },
+    inker: true,        // horgon tintát fúj és kapaszkodik
+    spawnDay: 5, spawnNight: 8,
+    rows: [
+      '......aaaa..',
+      '.....aaaaaa.',
+      '....aaaaaaaa',
+      '....aaeaaeaa',
+      '....aaaaaaaa',
+      '.tttttaaaaa.',
+      't.t.t.ttttt.',
+      't..t..t.t.t.',
+      '.t..t..t..t.'
+    ],
+    colors: { a: '#d0603a', t: '#a8442a', e: '#ffffff' }
+  },
+
+  ghost: {
+    name: 'GHOST FISH', points: 65, timeBonus: 6, rarity: 5, special: true,
+    depth: [0.35, 0.8], speed: 18, stamina: 55, regen: 4, pull: 11, aggression: 0.9,
+    bite: 0.55, weight: [1, 3],
+    motion: { amp: 2.5, freq: 1.5, drift: 6, wander: [2, 4] },
+    ghost: true,        // időnként láthatatlan – csak látható állapotban kap
+    glow: 8,
+    spawnDay: 6, spawnNight: 9,
+    rows: ['...aaaa...', 'c.aaaaaaa.', 'ccaaaaaaea', 'c.aaaaaaa.', '...aaaa...'],
+    colors: { a: '#dfe9ff', c: '#a9b8d6', e: '#5fd0ff' }
+  },
+
+  swordfish: {
+    name: 'SWORDFISH', points: 85, timeBonus: 7, rarity: 7, special: true,
+    depth: [0.3, 0.7], speed: 55, stamina: 75, regen: 5, pull: 13, aggression: 1.1,
+    bite: 0.45, weight: [10, 30],
+    motion: { amp: 1, freq: 2, drift: 8, wander: [2, 3], burstMul: 1.8, burstEvery: [2, 4], burstLen: 0.6 },
+    cutter: true,       // ha átúszik valaki damilján, elvágja
+    spawnDay: 5, spawnNight: 6,
+    rows: [
+      '......dddd..............',
+      'c...aaaaaaaaaa..........',
+      'cc' + 'a'.repeat(12) + 'ea' + 's'.repeat(7) + '.',
+      'c...aaaaaaaaaa..........',
+      '......dd................'
+    ],
+    colors: { a: '#3a5f9a', d: '#24406e', c: '#24406e', e: '#ffffff', s: '#c8d0e0' }
+  },
+
+  stonefish: {
+    name: 'STONEFISH', points: 120, timeBonus: 9, rarity: 8, special: true,
+    depth: [0.92, 0.95], speed: 2, stamina: 85, regen: 4, pull: 14, aggression: 0.9,
+    bite: 0.8, weight: [1, 3],
+    motion: { amp: 0, freq: 0, drift: 1, wander: [8, 12] },
+    stationary: true,   // a fenéken lapul, kőnek látszik; közelről leleplezhető
+    spawnDay: 4, spawnNight: 4,
+    rows: ['...rrr.rr...', '.rrarrarrr..', 'rrarrrrrrer.', 'rarrarrarrr.', '.rrrrrrrrrr.', '..rr..rr....'],
+    colors: { r: '#4f5563', a: '#646a77', e: '#4f5563' }
+  },
+
+  // ---------- TÁRGYAK (nem halak – ritkán sodródnak be, lásd maybeSpawnItem) ----------
+  crate: {
+    name: 'MYSTERY BOX', points: 0, timeBonus: 0, rarity: 0, item: true,
+    depth: [0.04, 0.08], speed: 6, stamina: 4, regen: 0, pull: 2, aggression: 0.1,
+    bite: 1, weight: [5, 10],
+    motion: { amp: 1, freq: 1.5, drift: 2, wander: [4, 6] },
+    spawnDay: 0, spawnNight: 0,
+    rows: ['bbbbbbbb', 'bymyymyb', 'bbbbbbbb', 'bymyymyb', 'bbbbbbbb'],
+    colors: { b: '#6b4220', y: '#a8743a', m: '#ffd23f' }
+  },
+
+  bottle: {
+    name: 'BOTTLE', points: 0, timeBonus: 0, rarity: 0, item: true,
+    depth: [0.02, 0.05], speed: 8, stamina: 3, regen: 0, pull: 1, aggression: 0.1,
+    bite: 1, weight: [0.5, 1],
+    motion: { amp: 1, freq: 2, drift: 2, wander: [4, 6] },
+    spawnDay: 0, spawnNight: 0,
+    rows: ['.gggg..', 'gpppggn', '.gggg..'],
+    colors: { g: '#5fbf7a', p: '#f0e6c0', n: '#8a5226' }
+  },
+
   oldone: {
-    name: 'THE OLD ONE', points: 300, timeBonus: 20, rarity: 11, minLevel: 1, rare: true,
+    name: 'THE OLD ONE', points: 400, timeBonus: 25, rarity: 11, rare: true,
     depth: [0.74, 0.95], speed: 7, stamina: 220, regen: 6, pull: 16, aggression: 1.2,
     bite: 0.35, weight: [80, 140],
     motion: { amp: 5, freq: 0.6, drift: 2, wander: [5, 9] },
@@ -1042,6 +1216,20 @@ const Sound = {
   bite()      { this.tone(440, 0.12, { slide: 880 }); },
   tug()       { this.tone(170, 0.06, { type: 'triangle', vol: 0.07 }); },
   mash()      { this.tone(900, 0.02, { vol: 0.015 }); },
+  // sirály: vicces, rikácsoló hang
+  squawk(angry) {
+    const base = angry ? 1500 : 1250;
+    [0, 0.16, 0.34].forEach((d, i) => {
+      this.tone(base - i * 120, 0.13, { type: 'sawtooth', slide: base - 600 - i * 80, vol: 0.05, delay: d });
+      this.tone(base * 0.5, 0.08, { type: 'square', slide: base * 0.35, vol: 0.025, delay: d + 0.03 });
+    });
+  },
+  thunder() {
+    this.tone(70, 0.9, { type: 'sawtooth', slide: 30, vol: 0.09, delay: 0.1 });
+    this.tone(110, 0.5, { type: 'square', slide: 40, vol: 0.05, delay: 0.15 });
+  },
+  zap()       { this.tone(1600, 0.12, { type: 'sawtooth', slide: 300, vol: 0.06 }); this.tone(900, 0.1, { type: 'square', delay: 0.06, vol: 0.04 }); },
+  nom()       { this.tone(320, 0.05, { vol: 0.05 }); this.tone(260, 0.06, { vol: 0.05, delay: 0.07 }); },
   warn()      { this.tone(1400, 0.08, { vol: 0.05 }); this.tone(1400, 0.08, { vol: 0.05, delay: 0.12 }); },
   struggle()  { this.tone(110, 0.1, { type: 'sawtooth', vol: 0.025 }); },
   snap()      { this.tone(900, 0.3, { type: 'sawtooth', slide: 60, vol: 0.05 }); },
@@ -1220,6 +1408,10 @@ const game = {
   mods: null,            // mindenkire ható kártya-módosítók
   roundWinners: [],      // a körök győztesei sorban (zsinórban nyerés figyeléséhez)
   lastRoundWinner: null,
+  fishDeck: [],          // a különleges halfajok még ki nem húzott pakli
+  tug: null, gull: null, kraken: null,   // kötélhúzás / sirály / kraken
+  golden: 0, flash: 0, flashTimer: 0, wind: 1,   // Golden Hour, villám, szél
+  unlocked: new Set(),   // a tóba már bekerült különleges fajok
   crownDev: null         // az előző meccs győztesének eszköze (korona)
 };
 
@@ -1233,7 +1425,7 @@ function makePlayer(index, count, device = null) {
     index,
     device,              // 'kbR' (nyilak) | 'kbL' (WASD) | 'pad0'..'pad3' (kontroller)
     style: PLAYER_STYLE[index],
-    hook: { x: startX, y: HOOK_MIN_Y + 30, state: 'free', fish: null, tension: 0, overload: 0 },
+    hook: { x: startX, y: HOOK_MIN_Y + 30, state: 'free', fish: null, tension: 0, overload: 0, baited: true },
     boat: { x: startX },
     score: 0,
     roundScore: 0,
@@ -1244,6 +1436,9 @@ function makePlayer(index, count, device = null) {
     rarest: null,
     log: [],
     reelVel: 0,          // gombnyomkodásból származó tekerési lendület
+    snaps: 0, gullLost: 0, treasures: 0, steals: 0, longest: 0,   // a díjakhoz
+    pile: [],            // a körben kifogott halak a csónakban
+    stealCd: 0,          // rablási várakozás
     sinceAction: 99,     // utolsó rántás/tekerés óta eltelt idő
     in: { left: false, right: false, up: false, down: false, tug: false, reel: false }
   };
@@ -1400,6 +1595,7 @@ function onKeyPress(code, key = '') {
       }
       break;
     case 'gameover':
+      if (awardsRun) { if (['Enter', 'Space', 'Escape'].includes(code)) finishAwards(); return; }   // díjátadó átugrása
       if (game.stateTime < 1.2) return;   // véletlen gombnyomkodás ne indítson rögtön újat
       if (code === 'Enter' || code === 'Space') startGame();
       else if (code === 'Escape') openJoin();
@@ -1508,6 +1704,8 @@ function pollInput() {
       else if (e.left || e.right) changeRounds(e.left ? -1 : 1);
       else if (isIn && (e.cancel || e.back)) leaveDevice(s.device);
       else if (!isIn && (e.cancel || e.back) && joined.length === 0) showMenu();
+    } else if (game.state === 'gameover' && awardsRun) {
+      if (e.start || e.reel || e.cancel) finishAwards();
     } else if (game.state === 'gameover' && game.stateTime > 1.2) {
       if (e.start || e.reel) startGame();
       else if (e.back || e.tug) openJoin();
@@ -1637,7 +1835,8 @@ const ui = {
   kickScreen: $('#kick-screen'), kickList: $('#kick-list'), voteBtns: $('#vote-btns'),
   roundsRow: $('#rounds-row'), roundOpts: Array.from(document.querySelectorAll('.round-opt')),
   cardScreen: $('#card-screen'), cardTitle: $('#card-title'), cardNote: $('#card-note'), cardRow: $('#card-row'),
-  cardTargets: $('#card-targets'), cardTimer: $('#card-timer'), cardKeys: $('#card-keys')
+  cardTargets: $('#card-targets'), cardTimer: $('#card-timer'), cardKeys: $('#card-keys'),
+  awardsScreen: $('#awards-screen'), awardsList: $('#awards-list')
 };
 
 function setText(el, txt) {
@@ -2114,7 +2313,7 @@ function pickSpecies() {
   const night = game.mode === 'night';
   const entries = [];
   for (const [key, sp] of Object.entries(SPECIES)) {
-    if (sp.minLevel > game.level) continue;
+    if (sp.special && !(game.unlocked && game.unlocked.has(key))) continue;   // még nincs a tóban
     let w = night ? sp.spawnNight : sp.spawnDay;
     if (sp.rare) w *= CONFIG.RARE_CHANCE_MULTIPLIER * gmods().rare;   // GOLD RUSH / LUCKY LURE
     if (w > 0) entries.push([key, w]);
@@ -2128,7 +2327,7 @@ function spawnFish(onScreen = false, forcedKey = null) {
   const spr = SPRITES[key];
   const dir = Math.random() < 0.5 ? 1 : -1;
   const y = depthToY(rand(sp.depth[0], sp.depth[1]));
-  const x = onScreen ? rand(20, W - 20) : (dir > 0 ? -spr.width / 2 - 2 : W + spr.width / 2 + 2);
+  const x = (onScreen || sp.stationary) ? rand(20, W - 20) : (dir > 0 ? -spr.width / 2 - 2 : W + spr.width / 2 + 2);
   const stamina = sp.stamina * CONFIG.STAMINA_MULTIPLIER * game.diff.stamina;
   const m = sp.motion;
 
@@ -2175,8 +2374,18 @@ function updateSpawning(dt) {
   game.spawnTimer = frenzy ? 0.2 : CONFIG.SPAWN_INTERVAL;
 
   const count = game.fish.filter((f) => f.key !== 'oldone').length;
-  if (count < maxFish()) spawnFish(false);
+  if (count < maxFish()) {
+    const nf = spawnFish(false);
+    // PIRANHA: rajban érkezik
+    for (let k = 1; k < (nf.sp.school || 0); k++) {
+      const g = spawnFish(false, nf.key);
+      g.dir = nf.dir;
+      g.x = nf.x - nf.dir * k * 11;
+      g.y = g.baseY = g.targetY = clamp(nf.y + rand(-6, 6), depthToY(nf.sp.depth[0]), depthToY(nf.sp.depth[1]));
+    }
+  }
 
+  maybeSpawnItem();
   if (game.state === 'playing' && !game.oldOneActive) {
     const chance = CONFIG.OLD_ONE_SPAWN_CHANCE * CONFIG.RARE_CHANCE_MULTIPLIER *
       (game.mode === 'night' ? CONFIG.OLD_ONE_NIGHT_FACTOR : 1);
@@ -2189,7 +2398,8 @@ function mouthPos(f) {
 }
 
 function isNearHook(f, hk) {
-  if (hk.state !== 'free') return false;
+  if (hk.state !== 'free' || hk.baited === false) return false;   // csali nélkül nem kap semmi
+  if (f.invisible || f.leap > 0) return false;                     // láthatatlan / épp a levegőben
   const m = mouthPos(f);
   const tol = 5 + f.h * 0.25;
   return Math.abs(m.x - (hk.x - 1)) < tol && Math.abs(m.y - (hk.y + 3)) < tol;
@@ -2204,6 +2414,20 @@ function updateFish(f, dt) {
   const minY = depthToY(sp.depth[0]);
   const maxY = depthToY(sp.depth[1]);
   if (f.cooldown > 0) f.cooldown -= dt;
+
+  // --- különleges képességek (szabadon úszó hal)
+  if (sp.ghost) {                       // GHOST FISH: időnként láthatatlan
+    f.visTimer = (f.visTimer || rand(1.5, 3)) - dt;
+    if (f.visTimer <= 0) {
+      f.invisible = !f.invisible;
+      f.visTimer = f.invisible ? rand(1.5, 2.5) : rand(2, 3.5);
+    }
+  }
+  if (sp.stationary) {                  // STONEFISH: egy darabig a fenéken lapul, aztán eltűnik
+    f.life = (f.life === undefined ? rand(30, 45) : f.life) - dt;
+    if (f.life <= 0) { f.dead = true; return; }
+  }
+  if (f.cutCooldown > 0) f.cutCooldown -= dt;
 
   let burstMul = 1;
   if (m.burstMul) {
@@ -2233,7 +2457,7 @@ function updateFish(f, dt) {
   if (playing && f.cooldown <= 0 && f.fleeTimer <= 0) {
     for (const p of game.players) {
       const hk = p.hook;
-      if (hk.state !== 'free') continue;
+      if (hk.state !== 'free' || hk.baited === false || f.invisible) continue;
       const dx = hk.x - f.x;
       const mg = pmods(p).magnet;   // FISH MAGNET
       if (Math.sign(dx) === f.dir && Math.abs(dx) < 50 * mg && Math.abs(hk.y - f.y) < 28 * mg) {
@@ -2264,11 +2488,46 @@ function updateFish(f, dt) {
   f.x += f.dir * speed * dt;
   f.y = f.baseY + Math.sin(f.t * m.freq + f.phase) * m.amp;
 
+  // FLYING FISH: időnként kiugrik a vízből (közben nem kap rá a horogra)
+  if (m.leapEvery) {
+    if (f.leap > 0) {
+      f.leap -= dt;
+      const k = 1 - Math.max(0, f.leap) / LEAP_TIME;
+      f.y = f.baseY - Math.sin(k * Math.PI) * (f.baseY - SURFACE_Y + 14);
+      if (f.leap <= 0) splash(f.x, SURFACE_Y, 4, PALETTES[game.mode].foam);
+    } else {
+      f.leapTimer = (f.leapTimer === undefined ? rand(m.leapEvery[0], m.leapEvery[1]) : f.leapTimer) - dt;
+      if (f.leapTimer <= 0) {
+        f.leap = LEAP_TIME;
+        f.leapTimer = rand(m.leapEvery[0], m.leapEvery[1]);
+        splash(f.x, SURFACE_Y, 4, PALETTES[game.mode].foam);
+      }
+    }
+  }
+
+  // SWORDFISH: ha átúszik valaki damilján, elvágja
+  if (sp.cutter && playing && !(f.cutCooldown > 0) && f.y > SURFACE_Y + 3) {
+    const nose = mouthPos(f);
+    for (const p of game.players) {
+      if (p.hook.state === 'reset') continue;
+      const tip = getRodGeometry(p).tip;
+      if (distToSegment(nose.x, nose.y, tip.x, tip.y, p.hook.x, p.hook.y) < 2.5) {
+        if (Math.random() < 0.5) cutLine(p, f);   // minden második keresztezésnél vág
+        else f.cutCooldown = 2;
+        break;
+      }
+    }
+  }
+
   if (nearPlayer && f.cooldown <= 0 && f.fleeTimer <= 0) {
     f.biteTimer -= dt;
     if (f.biteTimer <= 0) {
       f.biteTimer = CONFIG.BITE_CHECK_INTERVAL;
       if (Math.random() < sp.bite * CONFIG.BITE_CHANCE_MULTIPLIER * game.diff.bite * pmods(nearPlayer).bite) {
+        if (sp.baitThief && Math.random() < sp.baitThief) {   // PIRANHA: csak a csalit viszi el
+          stealBait(nearPlayer, f);
+          return;
+        }
         hookFish(f, nearPlayer);
         return;
       }
@@ -2281,6 +2540,39 @@ function updateFish(f, dt) {
 
   const margin = f.w / 2 + 14;
   if (f.x < -margin || f.x > W + margin) f.dead = true;
+}
+
+const LEAP_TIME = 0.75;   // a repülőhal ugrásának ideje (mp)
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy || 1;
+  const k = clamp(((px - ax) * dx + (py - ay) * dy) / len2, 0, 1);
+  return Math.hypot(px - (ax + dx * k), py - (ay + dy * k));
+}
+
+// PIRANHA: a csali eltűnik, amíg fel nem húzod a horgot a felszínre
+function stealBait(p, f) {
+  p.hook.baited = false;
+  f.cooldown = 3;
+  f.fleeTimer = 1;
+  addPopup(t('pop_bait_stolen'), p.hook.x, p.hook.y - 8, '#ff6f9a', 1, 1.4);
+  Sound.nom();
+}
+
+// SWORDFISH: elvágott damil
+function cutLine(p, f) {
+  f.cutCooldown = 4;
+  const hk = p.hook;
+  addPopup(t('pop_line_cut'), hk.x, Math.max(SURFACE_Y + 8, hk.y - 10), '#ff4a4a', 1, 1.4);
+  if (hk.state === 'fight') {
+    snapLine(p);
+  } else {
+    hk.state = 'reset';
+    hk.tension = 0;
+    Sound.snap();
+  }
 }
 
 function cleanupFish() {
@@ -2301,6 +2593,12 @@ function updateHook(p, dt) {
   const hk = p.hook;
   const inp = p.in;
   p.sinceAction += dt;
+  if (p.stealCd > 0) p.stealCd -= dt;
+  if (inp.reel || inp.tug) countMash(p);            // kötélhúzás / kraken / sirály
+  if (hookFrozen(p)) {                               // a horog most nem mozog
+    if (inp.reel) { Net.owner = p.device; Sound.mash(); Net.owner = null; }
+    return;
+  }
 
   // Gombnyomkodás: minden REEL nyomás lendületet ad, ami magától lecseng
   const m = pmods(p);
@@ -2323,6 +2621,11 @@ function updateHook(p, dt) {
     hk.x = clamp(hk.x, 6, W - 6);
     hk.y = clamp(hk.y, HOOK_MIN_Y, playerMaxY(p));
     hk.tension = Math.max(0, hk.tension - CONFIG.TENSION_DECAY * 3 * dt);
+    if (hk.baited === false && hk.y <= HOOK_MIN_Y + 1) {   // a felszínen új csali kerül a horogra
+      hk.baited = true;
+      addPopup(t('pop_rebait'), hk.x, SURFACE_Y - 10, '#ff6f9a', 1, 1);
+      Sound.select();
+    }
   } else if (hk.state === 'fight') {
     updateFight(p, dt);
   } else {
@@ -2339,6 +2642,7 @@ function idleHook(p, dt) {
     if (hk.y <= HOOK_MIN_Y) {
       hk.y = HOOK_MIN_Y;
       hk.state = 'free';
+      hk.baited = true;
     }
   }
 }
@@ -2351,6 +2655,13 @@ function attachFishToHook(f, hk) {
 function hookFish(f, p) {
   const hk = p.hook;
   f.hookY = hk.y;   // hol kapott (DEEP TROUBLE kártyához)
+  f.hookedAt = game.time;
+  f.gullChecked = false;
+  f.invisible = false;
+  f.leap = 0;
+  f.ink = undefined;
+  f.zapTimer = undefined;
+  f.zap = 0;
   f.hooked = true;
   f.owner = p;
   f.stamina = f.maxStamina;
@@ -2361,6 +2672,7 @@ function hookFish(f, p) {
   hk.tension = 0;
   hk.overload = 0;
   p.sinceAction = 99;
+  if (f.sp.item) { f.stamina = 0; f.struggle = false; }   // a tárgyak nem küzdenek
   attachFishToHook(f, hk);
   for (let i = 0; i < 6; i++) effects.bubbles.push(makeBubble(hk.x + rand(-3, 3), hk.y + rand(0, 4)));
   addPopup('!', hk.x, hk.y - 8, p.style.tag, 2, 0.6);
@@ -2377,6 +2689,31 @@ function updateFight(p, dt) {
   const calm = speedFactor();
   const holding = inp.up;
   const sizeFactor = 1 / (1 + sp.pull / CONFIG.SIZE_PULL_DIVIDER);
+
+  // --- különleges képességek horgon
+  let lift = 1;                         // OCTOPUS: kapaszkodás közben nem jön fel
+  if (sp.inker) {
+    if (f.ink === undefined) { f.ink = 3.5; f.cling = 2; f.inkTimer = rand(5, 8); Sound.nom(); }
+    if (f.ink > 0) f.ink -= dt;
+    f.inkTimer -= dt;
+    if (f.inkTimer <= 0 && f.stamina > 0) { f.ink = 3; f.cling = 1.2; f.inkTimer = rand(5, 8); }
+    if (f.cling > 0 && f.stamina > 0) { f.cling -= dt; lift = 0; }
+  }
+  if (sp.zapper && f.stamina > 0) {     // ELECTRIC EEL: időnként áramot ad
+    f.zapTimer = (f.zapTimer === undefined ? rand(2, 3.5) : f.zapTimer) - dt;
+    if (f.zap > 0) f.zap -= dt;
+    if (f.zapTimer <= 0) {
+      f.zapTimer = rand(2.5, 4);
+      f.zap = 0.6;
+      hk.tension += 22;
+      addPopup(t('pop_zap'), hk.x, hk.y - 10, '#ffe14a', 1, 0.8);
+      Sound.zap();
+    }
+  }
+  if (sp.leaper && f.struggle && f.stamina > 0 && Math.random() < dt * 0.7) {   // FLYING FISH: rángatózva ugrál
+    hk.tension += 12;
+    if (hk.y < SURFACE_Y + 30) splash(hk.x, SURFACE_Y, 5, PALETTES[game.mode].foam);
+  }
 
   if (f.stamina > 0) {
     // Vergődés / pihenés váltakozik – ez adja az időzítést
@@ -2403,7 +2740,7 @@ function updateFight(p, dt) {
 
     // Felfelé nyíl nyomva tartva: lassú, egyenletes tekerés
     if (holding) {
-      hk.y -= CONFIG.REEL_SPEED_FIGHT * dt;
+      hk.y -= CONFIG.REEL_SPEED_FIGHT * lift * dt;
       hk.tension += (f.struggle ? CONFIG.REEL_TENSION_STRUGGLE : CONFIG.REEL_TENSION_REST) * dt;
       f.stamina -= CONFIG.REEL_DRAIN * dt;
       p.sinceAction = 0;
@@ -2414,7 +2751,7 @@ function updateFight(p, dt) {
       f.stamina -= CONFIG.MASH_DRAIN;
       p.sinceAction = 0;
     }
-    hk.y -= p.reelVel * CONFIG.MASH_FIGHT_FACTOR * sizeFactor * dt;
+    hk.y -= p.reelVel * CONFIG.MASH_FIGHT_FACTOR * sizeFactor * lift * dt;
   } else {
     // Kifáradt hal: tekerés és nyomkodás is könnyen húzza
     f.stamina = 0;
@@ -2437,8 +2774,9 @@ function updateFight(p, dt) {
       f.stamina -= CONFIG.TUG_DAMAGE * m.tug * (f.struggle ? 1 : CONFIG.TUG_REST_BONUS);
       let tug = f.struggle ? CONFIG.TUG_TENSION_STRUGGLE : CONFIG.TUG_TENSION_REST;
       if (p.sinceAction < CONFIG.TUG_SPAM_WINDOW) tug += CONFIG.TUG_SPAM_PENALTY;
+      if (f.zap > 0) tug *= 2;          // áramütés közben rántani veszélyes!
       hk.tension += tug;
-      hk.y -= 4;
+      hk.y -= 4 * lift;
       if (f.stamina <= 0) {
         f.stamina = 0;
         addPopup(t('pop_tired'), hk.x, hk.y - 10, '#5fd0ff', 1, 1);
@@ -2478,14 +2816,23 @@ function updateFight(p, dt) {
   } else {
     hk.overload = Math.max(0, hk.overload - dt * 2);
   }
-  if (hk.y <= SURFACE_Y + 1) catchFish(p);
+  if (hk.y < SURFACE_Y + 20) maybeSeagull(p);       // a felszín közelében jöhet a sirály
+  if (hk.y <= SURFACE_Y + 1) {
+    // amíg a sirály közeledik, a hal nem jön ki a vízből – előbb el kell hessegetni
+    if (game.gull && game.gull.pIdx === p.index && game.gull.phase === 'swoop') hk.y = SURFACE_Y + 1;
+    else catchFish(p);
+  }
 }
 
 function catchFish(p) {
   const hk = p.hook;
   const f = hk.fish;
+  if (f.sp.item) { collectItem(p, f); return; }     // mystery box / palack
   const m = pmods(p);
   let mult = (game.mode === 'night' ? CONFIG.NIGHT_SCORE_MULTIPLIER : 1) * CONFIG.POINTS_MULTIPLIER;
+  if (game.golden > 0) mult *= 2;                  // GOLDEN HOUR
+  p.pile.push(f.key);                              // a hal a csónakba kerül
+  p.longest = Math.max(p.longest, game.time - (f.hookedAt || game.time));
   if (f.sp.rare) mult *= m.rarePts;                    // LUCKY LURE
   if (f.sp.points >= 50) mult *= m.bigPts;             // BIG FISH BONUS
   if (gmods().deepOnly && (f.hookY || 0) < ZONE_Y1) mult = 0;   // DEEP TROUBLE: a sekélyben fogott nem ér pontot
@@ -2531,6 +2878,7 @@ function catchFish(p) {
 
 function snapLine(p) {
   const hk = p.hook;
+  p.snaps++;
   releaseFish(p);
   hk.state = 'reset';
   addBanner(game.numPlayers > 1 ? t('ban_snap_p', { p: playerName(p.index) }) : t('ban_snap'), 1.4, '#ff4a4a', true);
@@ -2548,6 +2896,9 @@ function releaseFish(p) {
     f.hooked = false;
     f.owner = null;
     f.struggle = false;
+    f.ink = 0;
+    f.zap = 0;
+    f.cling = 0;
     f.fleeTimer = 2.5;
     f.cooldown = 4;
     f.stamina = f.maxStamina;
@@ -2599,7 +2950,7 @@ function findPrey(pr) {
   for (const p of game.players) {
     const f = p.hook.fish;
     if (!f || f.key === 'oldone' || f.y < ZONE_Y1 - 2) continue;
-    if (pmods(p).sharkImmune) continue;                                          // SHARK REPELLENT
+    if (pmods(p).sharkImmune || f.sp.item) continue;                                          // SHARK REPELLENT
     const d = Math.hypot(f.x - pr.x, f.y - pr.y) * (pmods(p).sharkBait ? 0.1 : 1);   // SHARK BAIT
     if (d < bestDist) { best = f; bestDist = d; }
   }
@@ -2756,14 +3107,35 @@ function updateEvents(dt) {
   if (game.eventTimer >= CONFIG.EVENT_CHECK_INTERVAL) {
     game.eventTimer = 0;
     if (Math.random() < CONFIG.EVENT_CHANCE) {
-      const options = ['frenzy', 'calm'];
-      if (!game.oldOneActive) options.push('shadow');
-      startEvent(choice(options));
+      const options = [['frenzy', 3], ['calm', 2], ['storm', 2], ['golden', 1]];
+      if (!game.oldOneActive) options.push(['shadow', 1]);
+      if (game.level >= 3 && !game.kraken) options.push(['kraken', 1.2]);   // a kraken a 3. körtől jöhet
+      startEvent(pickWeighted(options));
     }
   }
 }
 
 function startEvent(type) {
+  if (type === 'storm') {
+    game.event = { type, time: CONFIG.STORM_TIME };
+    game.wind = Math.random() < 0.5 ? -1 : 1;
+    game.flashTimer = rand(1, 2.5);
+    addBanner(t('ban_storm'), 2, '#9fe8ff', true);
+    Sound.thunder();
+    return;
+  }
+  if (type === 'golden') {
+    game.event = { type, time: CONFIG.GOLDEN_TIME };
+    game.golden = CONFIG.GOLDEN_TIME;
+    addBanner(t('ban_golden'), 2, '#ffd23f', true);
+    Sound.roundClear();
+    return;
+  }
+  if (type === 'kraken') {
+    game.event = { type, time: 30 };
+    startKraken();
+    return;
+  }
   if (type === 'frenzy') {
     game.event = { type, time: CONFIG.FRENZY_DURATION };
     addBanner(t('ban_frenzy'), 2, '#ffc933', true);
@@ -2844,7 +3216,7 @@ function updateEffects(dt) {
 
 function updateBoat(p, dt) {
   const diff = p.hook.x - p.boat.x;
-  const bm = pmods(p).boat;   // HEAVY BOAT / SPEED BOAT
+  const bm = pmods(p).boat * pileFactor(p);   // HEAVY / SPEED BOAT kártya és a halom a csónakban
   const maxStep = 45 * bm * dt;
   p.boat.x += clamp(diff * 2.5 * bm * dt, -maxStep, maxStep);
   p.boat.x = clamp(p.boat.x, 16, W - 16);
@@ -2919,7 +3291,22 @@ function drawFish(f) {
   const exhausted = f.hooked && f.stamina <= 0;
   if (f.hooked && f.struggle) x += Math.round(rand(-1, 1));
 
+  // GHOST FISH: áttetsző, láthatatlan állapotban szinte eltűnik
+  if (f.sp.ghost) ctx.globalAlpha = f.invisible && !f.hooked ? 0.1 : 0.75;
   drawSprite(ctx, img, x, y, f.dir < 0, exhausted, f.sp.wiggle || 0, f.t);
+  ctx.globalAlpha = 1;
+
+  // ELECTRIC EEL: szikrák áramütéskor
+  if (f.zap > 0) {
+    ctx.fillStyle = Math.random() < 0.5 ? '#ffe14a' : '#ffffff';
+    for (let i = 0; i < 7; i++) ctx.fillRect(Math.round(x + rand(-3, f.w + 3)), Math.round(y + rand(-4, f.h + 4)), 1, 1);
+  }
+  // STONEFISH: közelről világít a szeme (lelepleződik)
+  if (f.sp.stationary && game.players.some((p) => Math.abs(p.hook.x - f.x) < 35 && Math.abs(p.hook.y - f.y) < 35)) {
+    const ex = f.dir > 0 ? 9 : f.w - 1 - 9;
+    ctx.fillStyle = Math.sin(game.time * 8) > 0 ? '#ffdd55' : '#ff6a3a';
+    ctx.fillRect(Math.round(x) + ex, Math.round(y) + 2, 1, 1);
+  }
 
   if (f.sp.sparkle && Math.random() < 0.2) {
     ctx.fillStyle = '#ffffff';
@@ -2938,6 +3325,23 @@ function drawFish(f) {
 function drawAllFish() {
   for (const f of game.fish) if (!f.hooked) drawFish(f);
   for (const p of game.players) if (p.hook.fish) drawFish(p.hook.fish);
+  drawInk();
+}
+
+// OCTOPUS: tintafelhő a hal körül (eltakarja a környéket)
+function drawInk() {
+  for (const f of game.fish) {
+    if (!(f.ink > 0)) continue;
+    const a = Math.min(1, f.ink) * 0.85;
+    ctx.fillStyle = `rgba(12,6,22,${a.toFixed(2)})`;
+    for (let i = 0; i < 6; i++) {
+      const ox = Math.sin(f.t * 1.3 + i * 1.7) * 9;
+      const oy = Math.cos(f.t * 1.1 + i * 2.1) * 6;
+      ctx.beginPath();
+      ctx.arc(f.x + ox, f.y + oy, 10 + (i % 3) * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
 
 function drawPredator() {
@@ -2958,7 +3362,8 @@ function drawPredator() {
 
 function getRodGeometry(p) {
   const hk = p.hook;
-  const bob = Math.round(Math.sin(game.time * 2.2 + p.index * 1.7));
+  const storm = game.event && game.event.type === 'storm' ? 3 : 1;   // viharban erősebben ring
+  const bob = Math.round(Math.sin(game.time * 2.2 + p.index * 1.7) * storm) + Math.min(2, Math.floor(pileCount(p) / 4));
   const facing = hk.x >= p.boat.x ? 1 : -1;
   const bx = Math.round(p.boat.x - 13);
   const by = SURFACE_Y - 3 + bob;
@@ -2978,7 +3383,7 @@ function drawLineAndHook(p, tip) {
   const hy = Math.round(hk.y);
   pixelLine(ctx, tip.x, tip.y, hx, hy, lineColor);
   drawSprite(ctx, SPRITES.hook, hx - 2, hy);
-  if (hk.state === 'free') {
+  if (hk.state === 'free' && hk.baited !== false) {
     const wig = Math.floor(game.time * 5 + p.index) % 2;
     ctx.fillStyle = '#ff6f9a';
     ctx.fillRect(hx - 2, hy + 2 + wig, 1, 2);
@@ -3003,6 +3408,7 @@ function drawSurface() {
 function drawBoat(p, r) {
   drawSprite(ctx, p.style.person, r.px, r.py, r.facing < 0);
   ctx.drawImage(p.style.boat, r.bx, r.by);
+  drawPile(p, r);
   pixelLine(ctx, r.hand.x, r.hand.y, r.tip.x, r.tip.y, '#6b4220');
   if (game.mode === 'night') {
     const lx = r.facing > 0 ? r.bx + 2 : r.bx + 23;
@@ -3104,10 +3510,15 @@ function drawGlobalCards() {
 }
 
 function drawEventIndicator() {
-  if (game.state !== 'playing' || !game.event || game.event.type === 'shadow') return;
-  const label = game.event.type === 'frenzy' ? t('ev_frenzy') : t('ev_calm');
-  const color = game.event.type === 'frenzy' ? '#ffc933' : '#9fe8ff';
-  drawText(ctx, `${label} ${pad(Math.ceil(game.event.time), 2)}`, 4, 4, 1, color);
+  if (game.state !== 'playing') return;
+  if (game.golden > 0) {                        // Golden Hour (eseményből vagy ládából)
+    drawText(ctx, `${t('ev_golden')} ${pad(Math.ceil(game.golden), 2)}`, W / 2, 4, 1, '#ffd23f', 'center');
+  }
+  const ev = game.event;
+  if (!ev || ev.type === 'shadow' || ev.type === 'golden' || ev.type === 'kraken') return;
+  const LABELS = { frenzy: ['ev_frenzy', '#ffc933'], calm: ['ev_calm', '#9fe8ff'], storm: ['ev_storm', '#9fe8ff'] };
+  const [key, color] = LABELS[ev.type] || ['ev_calm', '#9fe8ff'];
+  drawText(ctx, `${t(key)} ${pad(Math.ceil(ev.time), 2)}`, 4, 4, 1, color);
 }
 
 
@@ -3121,14 +3532,19 @@ function render() {
   drawWeeds();
   drawBubbles();
   drawAllFish();
+  drawKraken();
   drawPredator();
 
   const rods = game.players.map((p) => getRodGeometry(p));
   game.players.forEach((p, i) => drawLineAndHook(p, rods[i].tip));
+  drawTug();
   drawSurface();
   game.players.forEach((p, i) => drawBoat(p, rods[i]));
+  drawGull();
 
   if (game.mode === 'night') drawDarkness();
+  drawStorm();
+  drawGolden();
 
   drawParticles();
   drawPopups();
@@ -3209,7 +3625,7 @@ function updatePanel(pn, p) {
     setClass(pn.status, 'fight-status ' + cls);
   } else {
     pn.root.classList.add('idle');
-    setText(pn.fishName, hk.state === 'reset' ? t('line_lost') : t('no_fish'));
+    setText(pn.fishName, hk.state === 'reset' ? t('line_lost') : (hk.baited === false ? t('no_bait') : t('no_fish')));
     setText(pn.status, '');
     setWidth(pn.stFill, 0);
     setText(pn.stVal, '---');
@@ -3238,6 +3654,7 @@ function resetPlayerHook(p) {
   p.hook.x = x;
   p.hook.y = HOOK_MIN_Y + 30;
   p.hook.state = 'free';
+  p.hook.baited = true;
   p.boat.x = x;
   p.reelVel = 0;
   p.sinceAction = 99;
@@ -3245,6 +3662,8 @@ function resetPlayerHook(p) {
 
 function startGame() {
   if (Net.role === 'host' && Net.vote) return;   // szavazás közben nem indul meccs
+  if (awardsRun) finishAwards();
+  ui.awardsScreen.classList.add('hidden');
   if (!joined.length) joined = ['kbR'];
   game.numPlayers = joined.length;
   game.matchRounds = game.numPlayers > 1 ? lobbyRounds : 0;   // egyjátékos: végtelen
@@ -3254,6 +3673,8 @@ function startGame() {
   game.cardPick = null;
   game.roundWinners = [];
   game.lastRoundWinner = null;
+  game.fishDeck = Object.keys(SPECIES).filter((k) => SPECIES[k].special).sort(() => Math.random() - 0.5);
+  game.unlocked = new Set();
   game.mode = menu.mode;
   setPlayerCount(game.numPlayers);
   game.players = joined.map((dev, i) => {
@@ -3282,6 +3703,17 @@ function startRound(level) {
   game.cards = level > 1 ? (game.pendingCards || []) : [];
   game.pendingCards = [];
   applyCardMods();
+  // HALPAKLI: körönként új különleges fajok kerülnek a tóba (az első kör alap halakkal indul)
+  game.newFish = [];
+  if (level === 1) game.unlocked = new Set();
+  else {
+    const n = game.matchRounds ? (game.matchRounds <= 3 ? 3 : 2) : 1;
+    for (let i = 0; i < n && game.fishDeck.length; i++) {
+      const k = game.fishDeck.shift();
+      game.unlocked.add(k);
+      game.newFish.push(k);
+    }
+  }
   const wantMode = gmods().night ? 'night' : game.baseMode;   // NIGHT FALLS
   if (game.mode !== wantMode) {
     game.mode = wantMode;
@@ -3301,8 +3733,15 @@ function startRound(level) {
   resetPredatorTimer(true);
   for (const p of game.players) {
     p.roundScore = 0;
+    p.pile = [];            // üres csónakkal indul a kör
+    p.stealCd = 0;
     resetPlayerHook(p);
   }
+  game.tug = null;
+  game.gull = null;
+  game.kraken = null;
+  game.golden = 0;
+  game.flash = 0;
   populate();
 
   if (game.matchRounds) {
@@ -3312,9 +3751,7 @@ function startRound(level) {
     addBanner(t('ban_round', { n: level }), 1.4, '#ffc933', false);
   }
   addBanner(t('ban_target', { n: game.target }), 1.4, '#dfe8f5', false);
-  for (const [key, sp] of Object.entries(SPECIES)) {
-    if (sp.minLevel === level && level > 1) addBanner(t('ban_newfish', { name: fishName(key) }), 1.8, '#6cf06c', true);
-  }
+  for (const key of game.newFish || []) addBanner(t('ban_newfish', { name: fishName(key) }), 1.8, '#6cf06c', true);
   if (level > 1) addBanner(t('ban_tougher'), 1.4, '#ff9a4a', false);
   Sound.event();
 }
@@ -3350,6 +3787,11 @@ function finishRound(winner, byTarget) {
   }
   if (game.predator) predatorLeave(game.predator);
   game.event = null;
+  for (const p of game.players) if (p.hook.state === 'tug') p.hook.state = 'reset';
+  game.tug = null;
+  game.gull = null;
+  game.kraken = null;
+  game.golden = 0;
   effects.banners = [];
   if (!byTarget) addBanner(t('ban_timeup'), 1.2, '#ff4a4a', false);
   if (winner) {
@@ -3434,6 +3876,11 @@ function endGame() {
   if (game.predator) predatorLeave(game.predator);
   game.event = null;
   setState('gameover');
+  for (const p of game.players) if (p.hook.state === 'tug') p.hook.state = 'reset';
+  game.tug = null;
+  game.gull = null;
+  game.kraken = null;
+  game.awards = game.matchRounds ? computeAwards() : [];
   if (Net.role === 'host') Net.sendGameOver();
   showGameOverScreen();
 }
@@ -3501,9 +3948,11 @@ function showGameOverScreen() {
   }
 
   ui.goLog.innerHTML = ps.map(logHtml).join('');
-  ui.gameoverScreen.classList.remove('hidden');
   Music.play('menu');
   Sound.gameOver();
+  // versus: előbb a díjátadó, utána az eredménytábla
+  if (game.awards && game.awards.length) startAwards(game.awards);
+  else ui.gameoverScreen.classList.remove('hidden');
 }
 
 function showMenu() {
@@ -3828,7 +4277,7 @@ const NET = {
   CODE_LEN: 6
 };
 const SPECIES_KEYS = Object.keys(SPECIES);
-const HOOK_STATES = ['free', 'fight', 'reset'];
+const HOOK_STATES = ['free', 'fight', 'reset', 'tug'];
 
 const Net = {
   role: null,           // null | 'host' | 'client'
@@ -3969,6 +4418,7 @@ const Net = {
   sendGameOver() {
     this.broadcast({
       t: 'go', level: game.level, mode: game.mode, rounds: game.matchRounds, crown: game.crownDev,
+      awards: game.awards || [],
       players: game.players.map((p) => ({
         name: p.name, score: p.score, caught: p.caught, biggest: p.biggest, rarest: p.rarest,
         eaten: p.eaten, roundWins: p.roundWins, log: p.log
@@ -4235,18 +4685,24 @@ function makeSnapshot(events) {
     tf: game.timeFlash > 0 ? r1(game.timeFlash) : 0,
     f: game.fish.map((f) => [
       f.id, SPECIES_KEYS.indexOf(f.key), r1(f.x), r1(f.y), f.dir,
-      (f.hooked ? 1 : 0) | (f.struggle ? 2 : 0),
+      (f.hooked ? 1 : 0) | (f.struggle ? 2 : 0) | (f.zap > 0 ? 4 : 0) | (f.ink > 0 ? 8 : 0) | (f.invisible ? 16 : 0),
       Math.round((Math.max(0, f.stamina) / f.maxStamina) * 100)
     ]),
     p: game.players.map((p) => {
       const h = p.hook;
       return [r1(h.x), r1(h.y), HOOK_STATES.indexOf(h.state), h.fish ? h.fish.id : -1,
         Math.round(h.tension), h.overload > 0 ? 1 : 0, Math.round(p.reelVel), r1(p.boat.x),
-        p.score, p.roundScore, p.caught, p.roundWins, p.name, p.eaten, p.device || ''];
+        p.score, p.roundScore, p.caught, p.roundWins, p.name, p.eaten, p.device || '', h.baited === false ? 0 : 1, p.pile.length];
     }),
     pr: pr ? [r1(pr.x), r1(pr.y), pr.dir, pr.state] : 0,
     vt: voteInfo(),
     mr: game.matchRounds,
+    tg: game.tug ? [game.tug.thief, game.tug.owner, game.tug.a, game.tug.b] : 0,
+    gl: game.gull ? [r1(game.gull.x), r1(game.gull.y), game.gull.dir, game.gull.carry ? 1 : 0, game.gull.phase === 'swoop' ? 1 : 0, game.gull.pIdx] : 0,
+    kr: game.kraken ? [game.kraken.target, ['rise', 'hold', 'retreat'].indexOf(game.kraken.phase), game.kraken.progress,
+      game.kraken.need, r1(game.kraken.t), r1(game.kraken.x0), game.kraken.time] : 0,
+    gh: game.golden > 0 ? r1(game.golden) : 0,
+    fx: game.flash > 0 ? r1(game.flash) : 0,
     cd: game.cards.map((c) => [c.id, c.by || '', c.target || '']),
     e: events
   };
@@ -4292,6 +4748,12 @@ function applySnapshot(s) {
   }
   game.level = s.lv;
   game.matchRounds = s.mr || 0;
+  game.tug = s.tg ? { thief: s.tg[0], owner: s.tg[1], a: s.tg[2], b: s.tg[3] } : null;
+  game.gull = s.gl ? { x: s.gl[0], y: s.gl[1], dir: s.gl[2], carry: !!s.gl[3], phase: s.gl[4] ? 'swoop' : 'flee', pIdx: s.gl[5] } : null;
+  game.kraken = s.kr ? { target: s.kr[0], phase: ['rise', 'hold', 'retreat'][s.kr[1]], progress: s.kr[2], need: s.kr[3],
+    t: s.kr[4], x0: s.kr[5], time: s.kr[6] } : null;
+  game.golden = s.gh || 0;
+  if (s.fx) game.flash = s.fx;
   const cardsKey = JSON.stringify(s.cd || []);
   if (cardsKey !== Net.cardsKey) {   // aktív kártyák (kijelzéshez és a saját horog előrejelzéséhez)
     Net.cardsKey = cardsKey;
@@ -4333,6 +4795,9 @@ function applySnapshot(s) {
     f.dir = dir;
     f.hooked = !!(fl & 1);
     f.struggle = !!(fl & 2);
+    f.zap = fl & 4 ? 0.1 : 0;
+    f.ink = fl & 8 ? 0.6 : 0;
+    f.invisible = !!(fl & 16);
     f.stamina = st;
     seen.add(id);
   }
@@ -4361,6 +4826,9 @@ function applySnapshot(s) {
     p.name = cleanName(a[12] || '');
     p.eaten = a[13];
     p.device = a[14] || '';
+    h.baited = a[15] !== 0;
+    p.pileCount = a[16] || 0;
+    p.pile = null;
   });
   Net.ownIdx = game.players.findIndex((p) => p.device && p.device === Net.youDev);
   if (Net.cardsDirty || fresh) { applyCardMods(); Net.cardsDirty = false; }
@@ -4554,6 +5022,7 @@ function clientGameOver(m) {
   game.mode = m.mode;
   game.matchRounds = m.rounds || 0;
   game.crownDev = m.crown || null;
+  game.awards = Array.isArray(m.awards) ? m.awards.filter((a) => a && AWARDS.some((x) => x.id === a.id)) : [];
   m.players.forEach((d, i) => {
     const p = game.players[i];
     if (!p || !d) return;
@@ -4599,6 +5068,7 @@ function clientKey(code) {
     return;
   }
   if (st === 'gameover') {
+    if (awardsRun) { if (['Enter', 'Space', 'Escape'].includes(code)) finishAwards(); return; }
     if (code === 'Escape' && game.stateTime > 1.2) Net.leave();
     return;
   }
@@ -4626,6 +5096,7 @@ function clientPad(s) {
     return;
   }
   if (game.state === 'gameover') {
+    if (awardsRun) { if (e.start || e.reel || e.cancel) finishAwards(); return; }
     if ((e.back || e.cancel) && game.stateTime > 1.2) Net.leave();
     return;
   }
@@ -5157,6 +5628,7 @@ function checkHaptics() {
     if (hap.state === 'free' && st === 'fight') buzz(45);                 // kapás
     else if (hap.state === 'fight' && st === 'free') buzz([35, 50, 35]);  // kifogva
     else if (hap.state === 'fight' && st === 'reset') buzz(220);          // elszakadt / megette a cápa
+    else if (st === 'tug') buzz([30, 30, 30, 30, 30]);                    // kötélhúzás
   }
   if (over && !hap.over) buzz(25);                                        // piros zóna
   hap.state = st;
@@ -5191,15 +5663,13 @@ ui.joinSlots.forEach((slot, i) => {
 
 /* ==========================================================================
    19/G. KÁRTYÁK A KÖRÖK KÖZÖTT (versus)
-   A kör győztese 3 kártyából választ egyet. A hatás CSAK a következő körre szól.
-     🟥 átok   – egy másik játékosra (a győztes választja ki, kire)
-     🟩 előny  – a győztesre
+   Minden kör után a LEGHÁTUL ÁLLÓ játékos (legkevesebb megnyert kör, egyenlőségnél
+   a kevesebb összpont, ha az is egyenlő: véletlen) választ 3 kártyából egyet.
+   A hatás CSAK a következő körre szól.
+     🟥 átok   – egy előtte álló játékosra (a lista elején a vezető / koronás)
+     🟩 áldás  – magára
      🟦 mindenkire – az egész tóra
-   Igazságossági szabályok:
-     1) aki a meccsben vezet, nem kaphat előnyt (csak átok / mindenkire)
-     2) aki zsinórban nyer, csak átkot kaphat
-     3) a leghátul álló játékos minden kör végén automatikusan kap egy kis előnyt
-     4) az átok célpontjai közül a koronás játékos áll az első helyen
+   Így a kártya mindig a lemaradónak segít, a győztes jutalma maga a megnyert kör.
    ========================================================================== */
 const CARD_PICK_TIME = 15;        // ennyi mp-e van a győztesnek választani
 const CARDS = {
@@ -5232,7 +5702,6 @@ const CARDS = {
   time_crunch:     { type: 'global', icon: '⏳', global: (g) => { g.timeBonus *= 0.5; } }
 };
 const CARD_IDS = Object.keys(CARDS);
-const COMEBACK_CARDS = ['steel_line', 'turbo_reel', 'sharp_hook', 'speed_boat'];
 const CARD_COLORS = { curse: '#ff4a4a', boon: '#6cf06c', global: '#5fd0ff' };
 
 const cardName = (id) => t('card_' + id);
@@ -5277,16 +5746,6 @@ function playerMaxY(p) {
   return Math.min(HOOK_MAX_Y, depthToY(Math.min(CONFIG.HOOK_MAX_DEPTH, pmods(p).maxDepth)));
 }
 
-// --- A kör vége után: leghátul álló kap egy kis előnyt, a győztes választ
-function comebackPlayer(winner) {
-  const ps = game.players.slice().sort((a, b) => (a.roundWins - b.roundWins) || (a.score - b.score));
-  const last = ps[0];
-  const next = ps[1];
-  if (!last || !next || last === winner) return null;
-  if (last.roundWins === next.roundWins && last.score === next.score) return null;   // holtverseny: senki
-  return last;
-}
-
 function buildOffer(types) {
   const pool = CARD_IDS.filter((id) => types.includes(CARDS[id].type));
   const offer = [];
@@ -5303,7 +5762,7 @@ function buildOffer(types) {
   return offer.sort(() => Math.random() - 0.5);
 }
 
-// Célpontok sorrendje: koronás elöl, utána aki több kört nyert
+// Átok célpontjai: az előtte állók (a választó a leghátsó), a vezető / koronás elöl
 function curseTargets(pickerDev) {
   return game.players
     .filter((p) => p.device !== pickerDev)
@@ -5311,30 +5770,24 @@ function curseTargets(pickerDev) {
     .map((p) => p.device);
 }
 
+// A meccsben leghátul álló játékos
+function lastPlacePlayer() {
+  const ps = game.players.slice().sort((a, b) => (a.roundWins - b.roundWins) || (a.score - b.score));
+  const worst = ps[0];
+  if (!worst) return null;
+  const tied = ps.filter((p) => p.roundWins === worst.roundWins && p.score === worst.score);
+  return tied.length > 1 ? choice(tied) : worst;   // teljes holtverseny: véletlen
+}
+
 function openCardPhase() {
-  const winner = game.players.find((p) => p.device === game.lastRoundWinner) || null;
   game.pendingCards = [];
-
-  // 3) felzárkózó előny a leghátsónak
-  const last = comebackPlayer(winner);
-  if (last) {
-    const id = choice(COMEBACK_CARDS);
-    game.pendingCards.push({ id, by: null, target: last.device });
-    addBanner(t('card_comeback', { p: last.name || pLabel(last.index) }), 1.6, '#6cf06c', false);
-    addBanner(cardName(id), 1.4, CARD_COLORS.boon, true);
-  }
-  if (!winner) { beginNextRound(); return; }
-
-  // 1) vezető: nincs előny, 2) zsinórban nyerő: csak átok
-  const wins = game.roundWinners;
-  const streak = wins.length >= 2 && wins[wins.length - 1] === winner.device && wins[wins.length - 2] === winner.device;
-  const leader = game.players.every((p) => p === winner || winner.roundWins >= p.roundWins);
-  const types = streak ? ['curse'] : leader ? ['curse', 'global'] : ['curse', 'boon', 'global'];
-  const note = streak ? 'card_note_streak' : leader ? 'card_note_leader' : '';
-
+  const picker = lastPlacePlayer();
+  if (!picker) { beginNextRound(); return; }
   game.cardPick = {
-    picker: winner.device, pickerIdx: winner.index, offer: buildOffer(types), note,
-    targets: curseTargets(winner.device), time: CARD_PICK_TIME
+    picker: picker.device, pickerIdx: picker.index,
+    offer: buildOffer(['curse', 'boon', 'global']),   // mindig 1 átok, 1 áldás, 1 mindenkire
+    note: 'card_note_last',
+    targets: curseTargets(picker.device), time: CARD_PICK_TIME
   };
   cardUI.sel = 0;
   cardUI.stage = 'pick';
@@ -5534,6 +5987,489 @@ function panelCardsHtml(p) {
 
 
 /* ==========================================================================
+   19/H. CSATÁROZÁS ÉS VÉLETLEN ESEMÉNYEK
+     - kötélhúzás (halrablás), halom a csónakban, sirály
+     - mystery box, palack üzenettel, Golden Hour, vihar, kraken
+     - díjak a meccs végén
+   ========================================================================== */
+
+/* ---------- közös: gombnyomkodás számolása (kötélhúzás, kraken, sirály) ---------- */
+function countMash(p) {
+  const inp = p.in;
+  const tg = game.tug;
+  if (tg && inp.reel) {
+    if (tg.thief === p.index) tg.a++;
+    else if (tg.owner === p.index) tg.b++;
+  }
+  const kr = game.kraken;
+  if (kr && kr.phase === 'hold' && (inp.reel || inp.tug)) kr.progress++;
+  const g = game.gull;
+  if (g && g.phase === 'swoop' && g.pIdx === p.index && (inp.reel || inp.tug)) {
+    g.presses++;
+    if (g.presses >= g.need) {
+      g.phase = 'flee';
+      addPopup(t('pop_shoo'), g.x, g.y + 8, '#ffffff', 1, 1);
+      Sound.squawk(true);
+    }
+  }
+}
+
+// Le van-e fagyasztva a játékos horga (kötélhúzás / kraken)?
+function hookFrozen(p) {
+  const tg = game.tug;
+  if (tg && (tg.thief === p.index || tg.owner === p.index)) return true;
+  const kr = game.kraken;
+  return !!(kr && kr.target === p.index && (kr.phase === 'rise' || kr.phase === 'hold'));
+}
+
+/* ---------- KÖTÉLHÚZÁS: a szabad horoggal hozzáérsz más horgon lévő halához ---------- */
+function checkSteal() {
+  if (game.tug || game.numPlayers < 2 || game.state !== 'playing') return;
+  for (const p of game.players) {
+    const hk = p.hook;
+    if (hk.state !== 'free' || p.stealCd > 0 || hookFrozen(p)) continue;
+    for (const q of game.players) {
+      if (q === p || q.hook.state !== 'fight' || !q.hook.fish || hookFrozen(q)) continue;
+      const f = q.hook.fish;
+      if (f.sp.item || f.y < ZONE_Y1) continue;              // a sekély zóna védett
+      if (Math.abs(hk.x - f.x) < f.w / 2 + 4 && Math.abs(hk.y + 3 - f.y) < f.h / 2 + 4) {
+        startTug(p, q);
+        return;
+      }
+    }
+  }
+}
+
+function startTug(thief, owner) {
+  game.tug = { thief: thief.index, owner: owner.index, time: CONFIG.TUG_TIME, a: 0, b: 0 };
+  thief.hook.state = 'tug';
+  thief.stealCd = CONFIG.STEAL_COOLDOWN;
+  owner.stealCd = CONFIG.STEAL_COOLDOWN;   // azonnal ne lehessen visszalopni
+  addBanner(t('ban_tug'), 1.4, '#ffc933', true);
+  Sound.event();
+}
+
+function updateTug(dt) {
+  const tg = game.tug;
+  if (!tg) return;
+  const thief = game.players[tg.thief];
+  const owner = game.players[tg.owner];
+  if (!thief || !owner || !owner.hook.fish) {             // közben elvitte a cápa / sirály
+    if (thief && thief.hook.state === 'tug') thief.hook.state = 'free';
+    game.tug = null;
+    return;
+  }
+  tg.time -= dt;
+  if (tg.time > 0) return;
+  const f = owner.hook.fish;
+  const thiefWins = tg.a > tg.b * CONFIG.TUG_OWNER_BONUS && tg.a > 0;
+  if (thiefWins) {
+    owner.hook.fish = null;
+    owner.hook.state = 'free';
+    owner.hook.baited = false;
+    owner.hook.tension = 0;
+    thief.hook.state = 'fight';
+    thief.hook.fish = f;
+    thief.hook.tension = 0;
+    thief.hook.overload = 0;
+    f.owner = thief;
+    attachFishToHook(f, thief.hook);
+    thief.steals++;
+    addPopup(t('pop_stolen'), f.x, f.y - 12, thief.style.tag, 2, 1.4);
+    Sound.catchFish(false);
+  } else {
+    thief.hook.state = 'reset';
+    addPopup(t('pop_defended'), f.x, f.y - 12, owner.style.tag, 2, 1.4);
+    Sound.tug();
+  }
+  game.tug = null;
+}
+
+function drawTug() {
+  const tg = game.tug;
+  if (!tg) return;
+  const thief = game.players[tg.thief];
+  const owner = game.players[tg.owner];
+  if (!thief || !owner) return;
+  const f = owner.hook.fish;
+  const cx = f ? f.x : owner.hook.x;
+  const cy = (f ? f.y : owner.hook.y) - 16;
+  const total = tg.a + tg.b * CONFIG.TUG_OWNER_BONUS || 1;
+  const share = tg.a / total;
+  const w = 44;
+  const x0 = Math.round(clamp(cx - w / 2, 2, W - w - 2));
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x0 - 1, Math.round(cy) - 1, w + 2, 6);
+  ctx.fillStyle = owner.style.tag;
+  ctx.fillRect(x0, Math.round(cy), w, 4);
+  ctx.fillStyle = thief.style.tag;
+  ctx.fillRect(x0, Math.round(cy), Math.round(w * share), 4);
+  if (Math.floor(game.time * 6) % 2 === 0) drawText(ctx, t('pop_mash'), cx, cy - 8, 1, '#ffffff', 'center');
+}
+
+/* ---------- HALOM A CSÓNAKBAN: minél több hal, annál lassabb a csónak ---------- */
+function pileCount(p) {
+  return p.pile ? p.pile.length : (p.pileCount || 0);
+}
+
+function pileFactor(p) {
+  return Math.max(CONFIG.PILE_MIN, 1 - CONFIG.PILE_SLOWDOWN * pileCount(p));
+}
+
+const PILE_COLORS = ['#c3ccd6', '#a6c24a', '#5e8c3a', '#e8c860', '#d0603a', '#6e5c3a'];
+function drawPile(p, r) {
+  const n = Math.min(12, pileCount(p));
+  for (let k = 0; k < n; k++) {
+    const key = p.pile && p.pile[k];
+    ctx.fillStyle = key && SPECIES[key] ? (SPECIES[key].colors.a || PILE_COLORS[k % 6]) : PILE_COLORS[k % 6];
+    const flop = Math.floor(game.time * 4 + k * 1.7) % 7 === 0 ? -1 : 0;   // néha megrándul
+    const x = r.bx + 5 + (k % 6) * 3 + (Math.floor(k / 6) % 2);
+    const y = r.by - 1 - Math.floor(k / 6) * 2 + flop;
+    ctx.fillRect(x, y, 3, 2);
+  }
+}
+
+/* ---------- SIRÁLY: a felszínen ellopná a halat – nyomkodással elhessegethető ---------- */
+function maybeSeagull(p) {
+  const f = p.hook.fish;
+  if (!f || f.gullChecked || f.sp.item || game.gull || game.state !== 'playing') return;
+  f.gullChecked = true;
+  if (Math.random() >= CONFIG.SEAGULL_CHANCE) return;
+  const dir = p.hook.x < W / 2 ? -1 : 1;     // a távolabbi oldalról érkezik
+  const sx = dir > 0 ? -12 : W + 12;
+  game.gull = { pIdx: p.index, x: sx, y: 3, sx, sy: 3, dir: dir > 0 ? 1 : -1, t: 0, presses: 0, need: CONFIG.SEAGULL_SHOO, phase: 'swoop', carry: false };
+  addPopup(t('pop_seagull'), p.hook.x, SURFACE_Y - 14, '#ffffff', 2, 1.2);
+  Sound.squawk(false);
+}
+
+function updateGull(dt) {
+  const g = game.gull;
+  if (!g) return;
+  g.t += dt;
+  const p = game.players[g.pIdx];
+  if (g.phase === 'swoop') {
+    if (!p || !p.hook.fish) { g.phase = 'flee'; return; }
+    const k = Math.min(1, g.t / CONFIG.SEAGULL_TIME);
+    const tx = p.hook.x;
+    const ty = SURFACE_Y - 5;
+    g.x = g.sx + (tx - g.sx) * k;
+    g.y = g.sy + (ty - g.sy) * k - Math.sin(k * Math.PI) * 4;
+    g.dir = tx >= g.sx ? 1 : -1;
+    if (k >= 1) {                              // odaért: elviszi a halat
+      const f = p.hook.fish;
+      f.dead = true;
+      f.hooked = false;
+      p.hook.fish = null;
+      p.hook.state = 'free';
+      p.hook.baited = false;
+      p.hook.tension = 0;
+      p.gullLost++;
+      g.phase = 'steal';
+      g.carry = true;
+      addPopup(t('pop_gull_stole'), p.hook.x, SURFACE_Y - 16, '#ff4a4a', 1, 1.6);
+      Sound.squawk(true);
+    }
+  } else {
+    g.x += g.dir * 90 * dt;
+    g.y -= 25 * dt;
+    if (g.x < -20 || g.x > W + 20 || g.y < -10) game.gull = null;
+  }
+}
+
+function drawGull() {
+  const g = game.gull;
+  if (!g) return;
+  const x = Math.round(g.x);
+  const y = Math.round(g.y);
+  const d = g.dir;
+  const up = Math.floor(game.time * 10) % 2 === 0;
+  ctx.fillStyle = '#f4f4f4';
+  ctx.fillRect(x - 3, y, 6, 2);                               // test
+  ctx.fillRect(d > 0 ? x + 3 : x - 5, y - 1, 2, 2);           // fej
+  ctx.fillStyle = '#ffb020';
+  ctx.fillRect(d > 0 ? x + 5 : x - 7, y, 2, 1);               // csőr
+  ctx.fillStyle = '#101010';
+  ctx.fillRect(d > 0 ? x + 4 : x - 5, y - 1, 1, 1);           // szem
+  ctx.fillStyle = '#b8c0c8';                                   // szárnyak
+  if (up) {
+    ctx.fillRect(x - 5, y - 3, 3, 1);
+    ctx.fillRect(x - 3, y - 2, 2, 1);
+    ctx.fillRect(x + 1, y - 2, 2, 1);
+    ctx.fillRect(x + 2, y - 3, 3, 1);
+  } else {
+    ctx.fillRect(x - 6, y + 1, 4, 1);
+    ctx.fillRect(x + 2, y + 1, 4, 1);
+  }
+  if (g.carry) {
+    ctx.fillStyle = '#c3ccd6';
+    ctx.fillRect(x - 1, y + 2, 3, 2);
+  }
+  if (g.phase === 'swoop' && Math.floor(game.time * 6) % 2 === 0) {
+    const p = game.players[g.pIdx];
+    if (p) drawText(ctx, t('pop_mash'), p.hook.x, SURFACE_Y - 22, 1, '#ffffff', 'center');
+  }
+}
+
+/* ---------- MYSTERY BOX és PALACK (ritkán sodródnak be) ---------- */
+function maybeSpawnItem() {
+  if (game.state !== 'playing' || Math.random() >= CONFIG.ITEM_CHANCE) return;
+  if (game.fish.some((f) => f.sp.item)) return;
+  spawnFish(false, Math.random() < 0.55 ? 'crate' : 'bottle');
+}
+
+function collectItem(p, f) {
+  const hk = p.hook;
+  f.dead = true;
+  f.hooked = false;
+  hk.fish = null;
+  hk.state = 'free';
+  hk.tension = 0;
+  hk.y = HOOK_MIN_Y;
+  p.treasures++;
+  splash(hk.x, SURFACE_Y, 10, PALETTES[game.mode].foam);
+  if (f.key === 'bottle') openBottle(p);
+  else openCrate(p);
+  if (game.state === 'playing' && p.roundScore >= game.target) roundClear(p);
+}
+
+function openCrate(p) {
+  const r = Math.random();
+  addBanner(t('item_crate'), 1.2, '#ffc933', false);
+  let outcome;
+  let pts = 0;
+  if (r < 0.3) {                                 // pontjutalom
+    pts = Math.round(100 * (game.mode === 'night' ? CONFIG.NIGHT_SCORE_MULTIPLIER : 1) * (game.golden > 0 ? 2 : 1));
+    p.score += pts;
+    p.roundScore += pts;
+    outcome = t('item_jackpot', { n: pts });
+    Sound.catchFish(true);
+  } else if (r < 0.55) {                          // plusz idő
+    game.timeLeft = Math.min(CONFIG.TIME_MAX, game.timeLeft + 15);
+    game.timeFlash = 1;
+    outcome = t('item_time', { n: 15 });
+    Sound.catchFish(false);
+  } else if (r < 0.8) {                           // GOLDEN HOUR mindenkinek
+    game.golden = CONFIG.GOLDEN_TIME;
+    outcome = t('ban_golden');
+    Sound.roundClear();
+  } else {                                        // csak egy régi bakancs...
+    outcome = t('item_boot');
+    Sound.tone(300, 0.25, { type: 'triangle', slide: 120, vol: 0.06 });
+  }
+  addBanner(outcome, 1.8, '#ffc933', true);
+  p.log.push({ nick: fishName('crate'), species: outcome, weight: 0, pts, round: game.level });
+}
+
+function openBottle(p) {
+  const type = Math.random() < 0.5 ? 'boon' : 'curse';
+  const id = choice(CARD_IDS.filter((k) => CARDS[k].type === type));
+  game.cards.push({ id, by: p.device, target: p.device, bottle: true });
+  applyCardMods();
+  addBanner(t('item_bottle'), 1.2, '#5fd0ff', false);
+  addBanner(cardName(id), 1.8, CARD_COLORS[type], true);
+  if (type === 'boon') Sound.catchFish(true);
+  else Sound.tone(400, 0.3, { type: 'sawtooth', slide: 150, vol: 0.05 });
+  p.log.push({ nick: fishName('bottle'), species: cardName(id), weight: 0, pts: 0, round: game.level });
+}
+
+/* ---------- VIHAR: szél sodorja a horgokat, villámlik ---------- */
+function updateStorm(dt) {
+  if (game.flash > 0) game.flash -= dt;
+  if (!game.event || game.event.type !== 'storm') return;
+  game.flashTimer -= dt;
+  if (game.flashTimer <= 0) {
+    game.flashTimer = rand(2, 4);
+    game.flash = 0.15;
+    Sound.thunder();
+  }
+  for (const p of game.players) {
+    if (hookFrozen(p)) continue;
+    const hk = p.hook;
+    if (hk.state === 'free') hk.x = clamp(hk.x + game.wind * 12 * dt, 6, W - 6);
+    else if (hk.state === 'fight') hk.x = clamp(hk.x + game.wind * 5 * dt, 6, W - 6);
+  }
+}
+
+function drawStorm() {
+  if (game.event && game.event.type === 'storm') {
+    ctx.fillStyle = 'rgba(190,220,255,0.55)';
+    for (let i = 0; i < 70; i++) {
+      const x = (i * 53 + game.time * 140) % (W + 40) - 20;
+      const y = (i * 37 + game.time * 260) % H;
+      ctx.fillRect(Math.round(x), Math.round(y), 1, 3);
+    }
+  }
+  if (game.flash > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(0.7, game.flash * 5).toFixed(2)})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+/* ---------- GOLDEN HOUR: dupla pont mindenkinek ---------- */
+function drawGolden() {
+  if (!(game.golden > 0)) return;
+  ctx.fillStyle = 'rgba(255,200,40,0.08)';
+  ctx.fillRect(0, 0, W, H);
+}
+
+/* ---------- KRAKEN: elkapja valaki damilját, mindenki együtt nyomkodja ---------- */
+function startKraken() {
+  const cand = game.players.filter((p) => p.hook.state === 'free' || p.hook.state === 'fight');
+  if (!cand.length) { game.event = null; return; }
+  const target = choice(cand);
+  game.kraken = {
+    target: target.index, phase: 'rise', t: 0, progress: 0,
+    need: CONFIG.KRAKEN_NEED_BASE + CONFIG.KRAKEN_NEED_PER * game.players.length,
+    x0: clamp(target.hook.x + rand(-25, 25), 10, W - 10), time: CONFIG.KRAKEN_TIME
+  };
+  addBanner(t('ban_kraken'), 1.6, '#c77dff', true);
+  addBanner(t('ban_kraken_mash'), 1.8, '#ffffff', false);
+  game.shake = 0.8;
+  Sound.rumble();
+}
+
+function updateKraken(dt) {
+  const kr = game.kraken;
+  if (!kr) return;
+  kr.t += dt;
+  const target = game.players[kr.target];
+  if (kr.phase === 'rise' && kr.t >= 1.2) { kr.phase = 'hold'; kr.t = 0; }
+  else if (kr.phase === 'hold') {
+    if (kr.progress >= kr.need) {                          // sikerült elűzni
+      kr.phase = 'retreat';
+      kr.t = 0;
+      for (const p of game.players) { p.score += 15; p.roundScore += 15; }
+      addBanner(t('ban_kraken_win'), 1.8, '#6cf06c', true);
+      Sound.roundClear();
+    } else if (kr.t >= kr.time) {                          // elvitte
+      kr.phase = 'retreat';
+      kr.t = 0;
+      if (target) {
+        if (target.hook.fish) {
+          const f = target.hook.fish;
+          releaseFish(target);
+          f.dead = true;
+        }
+        target.hook.state = 'reset';
+        target.hook.tension = 0;
+      }
+      addBanner(t('ban_kraken_lose'), 1.8, '#ff4a4a', true);
+      Sound.chomp();
+    }
+  } else if (kr.phase === 'retreat' && kr.t >= 1.2) {
+    game.kraken = null;
+    if (game.event && game.event.type === 'kraken') game.event = null;
+  }
+}
+
+function drawKraken() {
+  const kr = game.kraken;
+  if (!kr) return;
+  const target = game.players[kr.target];
+  if (!target) return;
+  const tipX = target.hook.x;
+  const tipY = target.hook.y + 3;
+  let reach = 1;
+  if (kr.phase === 'rise') reach = Math.min(1, kr.t / 1.2);
+  else if (kr.phase === 'retreat') reach = Math.max(0, 1 - kr.t / 1.2);
+  const baseY = H - 2;
+  const N = 26;
+  for (let i = 0; i <= N; i++) {
+    const k = (i / N) * reach;
+    const x = kr.x0 + (tipX - kr.x0) * k + Math.sin(game.time * 3 + i * 0.6) * 4 * (1 - k);
+    const y = baseY + (tipY - baseY) * k;
+    const thick = Math.max(1, Math.round(5 * (1 - i / N)) + 1);
+    ctx.fillStyle = '#7a2f8a';
+    ctx.fillRect(Math.round(x - thick / 2), Math.round(y), thick, 4);
+    if (i % 3 === 0 && thick > 2) {
+      ctx.fillStyle = '#e6a6f0';
+      ctx.fillRect(Math.round(x), Math.round(y) + 1, 1, 1);
+    }
+  }
+  if (kr.phase === 'hold') {
+    const w = 120;
+    const x0 = Math.round(W / 2 - w / 2);
+    const y0 = 66;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x0 - 1, y0 - 1, w + 2, 6);
+    ctx.fillStyle = '#3a1540';
+    ctx.fillRect(x0, y0, w, 4);
+    ctx.fillStyle = '#c77dff';
+    ctx.fillRect(x0, y0, Math.round(w * Math.min(1, kr.progress / kr.need)), 4);
+    drawText(ctx, `${t('ban_kraken_mash')} ${Math.max(0, Math.ceil(kr.time - kr.t))}`, W / 2, y0 + 7, 1, '#ffffff', 'center');
+  }
+}
+
+/* ---------- DÍJAK A MECCS VÉGÉN ---------- */
+const AWARDS = [
+  { id: 'big', icon: '🐋', stat: (p) => (p.biggest ? p.biggest.weight : 0), min: 0.01, fmt: (v) => t('aw_v_kg', { n: v.toFixed(2) }) },
+  { id: 'shark', icon: '🦈', stat: (p) => p.eaten, min: 1, fmt: (v) => t('aw_v_times', { n: v }) },
+  { id: 'butter', icon: '🧈', stat: (p) => p.snaps, min: 1, fmt: (v) => t('aw_v_times', { n: v }) },
+  { id: 'gull', icon: '🐦', stat: (p) => p.gullLost, min: 1, fmt: (v) => t('aw_v_times', { n: v }) },
+  { id: 'thief', icon: '🦝', stat: (p) => p.steals, min: 1, fmt: (v) => t('aw_v_times', { n: v }) },
+  { id: 'treasure', icon: '🧰', stat: (p) => p.treasures, min: 1, fmt: (v) => t('aw_v_times', { n: v }) },
+  { id: 'patient', icon: '⏱', stat: (p) => Math.round(p.longest || 0), min: 5, fmt: (v) => t('aw_v_secs', { n: v }) }
+];
+
+function computeAwards() {
+  if (game.players.length < 2) return [];
+  const list = [];
+  for (const a of AWARDS) {
+    const vals = game.players.map((p) => a.stat(p) || 0);
+    const best = Math.max(...vals);
+    if (best < a.min) continue;
+    const winners = game.players.filter((p, i) => vals[i] === best).map((p) => p.index);
+    list.push({ id: a.id, who: winners, value: best });
+  }
+  return list;
+}
+
+let awardsRun = null;
+
+function startAwards(list) {
+  awardsRun = { list, t: 0, shown: 0 };
+  ui.awardsList.innerHTML = '';
+  ui.awardsScreen.classList.remove('hidden');
+  ui.gameoverScreen.classList.add('hidden');
+}
+
+function tickAwards(dt) {
+  if (!awardsRun) return;
+  awardsRun.t += dt;
+  const STEP = 1.5;
+  while (awardsRun.shown < awardsRun.list.length && awardsRun.t >= (awardsRun.shown + 0.6) * STEP) {
+    revealAward(awardsRun.list[awardsRun.shown]);
+    awardsRun.shown++;
+  }
+  if (awardsRun.shown >= awardsRun.list.length && awardsRun.t >= awardsRun.list.length * STEP + 2.5) finishAwards();
+}
+
+function revealAward(a) {
+  const def = AWARDS.find((x) => x.id === a.id);
+  if (!def) return;
+  const names = a.who.map((i) => {
+    const p = game.players[i];
+    return p ? `<span style="color:${p.style.tag}">${escapeHtml(p.name || pLabel(i))}</span>` : '?';
+  }).join(' &amp; ');
+  const div = document.createElement('div');
+  div.className = 'award';
+  div.innerHTML = `<span class="award-icon">${def.icon}</span><span class="award-text">` +
+    `<span class="award-name">${escapeHtml(t('aw_' + a.id))}</span>` +
+    `<span class="award-who">${names} - ${escapeHtml(def.fmt(a.value))}</span></span>`;
+  ui.awardsList.appendChild(div);
+  Sound.catchFish(true);
+}
+
+function finishAwards() {
+  if (!awardsRun) return;
+  awardsRun = null;
+  ui.awardsScreen.classList.add('hidden');
+  ui.gameoverScreen.classList.remove('hidden');
+  game.stateTime = 0;          // ne induljon rögtön új meccs egy véletlen gombnyomástól
+}
+
+
+/* ==========================================================================
    19/B. ELRENDEZÉS – a játék mindig teljesen beférjen az ablakba
    A pontsáv, a panelek és a súgósor tényleges magasságát lemérjük, és a
    játékteret (4:3, torzítás nélkül) akkorára méretezzük, amekkora még kifér.
@@ -5550,6 +6486,20 @@ const LAYOUT = {
 
 let fitPending = false;
 
+// Telefonon a böngésző címsora görgetéskor ki-be ugrik, ettől változik az ablak magassága.
+// Ilyenkor nem méretezünk újra: tájolásonként a legkisebb látott magasságot használjuk,
+// így a játék akkor is kifér, amikor a címsor látszik, és nem ugrál.
+const stableH = { p: 0, l: 0, w: 0 };
+function layoutHeight() {
+  const iw = window.innerWidth;
+  const ih = window.innerHeight;
+  if (!touchActive || isFullscreen()) return ih;
+  const key = iw > ih ? 'l' : 'p';
+  if (stableH.w !== iw) { stableH.p = 0; stableH.l = 0; stableH.w = iw; }   // új szélesség = elforgatták
+  if (!stableH[key] || ih < stableH[key]) stableH[key] = ih;
+  return stableH[key];
+}
+
 function fitLayout() {
   fitPending = false;
   const wrap = document.getElementById('game-wrapper');
@@ -5558,7 +6508,7 @@ function fitLayout() {
   const hud = document.getElementById('hud');
   const help = document.querySelector('.help');
   const iw = window.innerWidth;
-  const ih = window.innerHeight;
+  const ih = layoutHeight();
   const GAP = 8;
   const borderW = scr.offsetWidth - canvas.offsetWidth;          // a játéktér kerete
   const borderH = scr.offsetHeight - canvas.offsetHeight;
@@ -5608,9 +6558,18 @@ function scheduleFit() {
 }
 
 function initLayout() {
-  window.addEventListener('resize', scheduleFit);
-  document.addEventListener('fullscreenchange', scheduleFit);
-  document.addEventListener('webkitfullscreenchange', scheduleFit);
+  let lastW = window.innerWidth;
+  window.addEventListener('resize', () => {
+    // telefonon: ha csak a magasság változott kicsit (címsor), nem méretezünk újra
+    if (touchActive && !isFullscreen() && window.innerWidth === lastW &&
+        window.innerHeight >= (stableH[window.innerWidth > window.innerHeight ? 'l' : 'p'] || 0)) return;
+    lastW = window.innerWidth;
+    scheduleFit();
+  });
+  const fsChange = () => { stableH.p = 0; stableH.l = 0; scheduleFit(); };
+  document.addEventListener('fullscreenchange', fsChange);
+  document.addEventListener('webkitfullscreenchange', fsChange);
+  window.addEventListener('orientationchange', fsChange);
   // ha a pontsáv vagy a panelek magassága változik (pl. 2 játékos, hosszabb szöveg)
   if (window.ResizeObserver) {
     const ro = new ResizeObserver(scheduleFit);
@@ -5641,6 +6600,14 @@ function update(dt) {
   if (game.state === 'playing') {
     updateEvents(dt);
     for (const p of game.players) updateHook(p, dt);
+    if (game.state === 'playing') {
+      updateTug(dt);
+      updateGull(dt);
+      updateKraken(dt);
+      updateStorm(dt);
+      if (game.golden > 0) game.golden -= dt;
+      checkSteal();
+    }
   } else {
     for (const p of game.players) idleHook(p, dt);
   }
@@ -5680,6 +6647,7 @@ function frame(now) {
   update(dt);
   Net.tick(dt);
   checkHaptics();
+  tickAwards(dt);
   render();
   updateHUD();
   requestAnimationFrame(frame);

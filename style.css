@@ -761,3 +761,24 @@ body.touch-landscape .touch-pause { top: max(10px, env(safe-area-inset-top)); ri
 
 .panel-cards { grid-column: 1 / -1; font-size: 0.85em; min-height: 0; line-height: 1.4; }
 .panel-cards:empty { display: none; }
+
+/* ---------- v19: díjátadó ---------- */
+.awards-screen { background: rgba(3, 5, 14, 0.92); }
+.awards-list { display: flex; flex-direction: column; gap: 8px; min-width: 60%; }
+.award {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 14px;
+  background: #0d1424;
+  border: 3px solid var(--amber);
+  box-shadow: 4px 4px 0 #000;
+  animation: award-in 0.35s ease-out;
+  text-align: left;
+}
+.award-icon { font-size: 2em; }
+.award-text { display: flex; flex-direction: column; gap: 2px; }
+.award-name { color: var(--amber); }
+.award-who { color: var(--text); }
+@keyframes award-in { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .award { animation: none; } }
