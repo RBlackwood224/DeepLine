@@ -1,7 +1,7 @@
 'use strict';
 
 /* ==========================================================================
-   DEEP LINE — retro arcade horgászverseny (v19)
+   DEEP LINE — retro arcade horgászverseny (v20)
    HTML5 Canvas + vanilla JavaScript, külső függőségek és képfájlok nélkül.
 
    Újdonságok a v2-ben:
@@ -51,6 +51,8 @@
    v19:
      - kötélhúzás (halrablás), halom a csónakban, sirály, mystery box, palack, Golden Hour,
        vihar, kraken, díjak a meccs végén
+   v20:
+     - ritkább sirály (kisebb esély + legalább 25 mp szünet két sirály között)
      - OPTIONS menü: külön zene- és effekt-hangerő (mentve)
      - nyelvek: English (alap) / Français
 
@@ -89,7 +91,8 @@ const CONFIG = {
   STEAL_COOLDOWN: 8,            // rablási kísérlet után ennyi mp-ig nem próbálkozhat újra
   TUG_TIME: 3,                  // a kötélhúzás hossza (mp)
   TUG_OWNER_BONUS: 1.2,         // a hal gazdájának gombnyomásai ennyivel többet érnek
-  SEAGULL_CHANCE: 0.3,          // ennyi eséllyel jön sirály, amikor egy hal a felszínhez ér
+  SEAGULL_CHANCE: 0.12,         // ennyi eséllyel jön sirály, amikor egy hal a felszínhez ér
+  SEAGULL_COOLDOWN: 25,         // két sirály között legalább ennyi mp telik el (a kör elején is)
   SEAGULL_TIME: 1.5,            // ennyi idő alatt ér oda a sirály
   SEAGULL_SHOO: 6,              // ennyi gombnyomással lehet elhessegetni
   PILE_SLOWDOWN: 0.08,          // minden hal a csónakban ennyivel lassítja a csónakot
@@ -1410,6 +1413,7 @@ const game = {
   lastRoundWinner: null,
   fishDeck: [],          // a különleges halfajok még ki nem húzott pakli
   tug: null, gull: null, kraken: null,   // kötélhúzás / sirály / kraken
+  gullCd: 0,             // várakozás a következő sirályig
   golden: 0, flash: 0, flashTimer: 0, wind: 1,   // Golden Hour, villám, szél
   unlocked: new Set(),   // a tóba már bekerült különleges fajok
   crownDev: null         // az előző meccs győztesének eszköze (korona)
@@ -3739,6 +3743,7 @@ function startRound(level) {
   }
   game.tug = null;
   game.gull = null;
+  game.gullCd = CONFIG.SEAGULL_COOLDOWN * 0.6;   // a kör első ~15 mp-ében nincs sirály
   game.kraken = null;
   game.golden = 0;
   game.flash = 0;
@@ -6132,11 +6137,12 @@ function drawPile(p, r) {
 /* ---------- SIRÁLY: a felszínen ellopná a halat – nyomkodással elhessegethető ---------- */
 function maybeSeagull(p) {
   const f = p.hook.fish;
-  if (!f || f.gullChecked || f.sp.item || game.gull || game.state !== 'playing') return;
+  if (!f || f.gullChecked || f.sp.item || game.gull || game.gullCd > 0 || game.state !== 'playing') return;
   f.gullChecked = true;
   if (Math.random() >= CONFIG.SEAGULL_CHANCE) return;
   const dir = p.hook.x < W / 2 ? -1 : 1;     // a távolabbi oldalról érkezik
   const sx = dir > 0 ? -12 : W + 12;
+  game.gullCd = CONFIG.SEAGULL_COOLDOWN;
   game.gull = { pIdx: p.index, x: sx, y: 3, sx, sy: 3, dir: dir > 0 ? 1 : -1, t: 0, presses: 0, need: CONFIG.SEAGULL_SHOO, phase: 'swoop', carry: false };
   addPopup(t('pop_seagull'), p.hook.x, SURFACE_Y - 14, '#ffffff', 2, 1.2);
   Sound.squawk(false);
@@ -6606,6 +6612,7 @@ function update(dt) {
       updateKraken(dt);
       updateStorm(dt);
       if (game.golden > 0) game.golden -= dt;
+      if (game.gullCd > 0) game.gullCd -= dt;
       checkSteal();
     }
   } else {
