@@ -2,9 +2,7 @@
 
 A little retro fishing game that runs in your browser. You drop your line, hook something, tire it out and reel it in before the clock runs out. Sounds simple. Then the shark shows up.
 
-**▶ Play it here:** [[https://YOUR-USERNAME.github.io/YOUR-REPO/](https://rblackwood224.github.io/DeepLine/)]
-
-
+**▶ Play it here:** https://rblackwood224.github.io/DeepLine/
 
 ---
 
